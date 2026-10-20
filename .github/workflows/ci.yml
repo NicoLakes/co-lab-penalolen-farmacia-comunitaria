@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Quality
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          cache: true
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Lint, types, tests and build
+        run: pnpm check
+      - name: Audit production dependencies
+        run: pnpm audit --prod --audit-level=high
+
+  docker:
+    name: Docker integration
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      COMPOSE_FILE: compose.development.yaml
+      COMPOSE_ENV_FILES: .env.example
+      COMPOSE_PROJECT_NAME: farmacia-ci
+      # Credenciales sintéticas para la base efímera del runner.
+      POSTGRES_PASSWORD: ci-only-postgres-password
+      DATABASE_URL: postgresql://farmacia:ci-only-postgres-password@postgres:5432/farmacia
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Validate Compose
+        run: docker compose config --quiet
+      - name: Build images, migrate and wait for healthy services
+        run: docker compose up --build --wait --wait-timeout 180
+      - name: Test PostgreSQL with independent pools
+        run: docker compose run --rm --no-deps migrate pnpm --filter @farmacia/database test:integration
+      - name: Check published web, API and HTTP proxy
+        run: |
+          curl --fail --silent --show-error --max-time 10 --output /dev/null http://127.0.0.1:5173/
+          curl --fail --silent --show-error --max-time 10 http://127.0.0.1:3001/api/health
+          curl --fail --silent --show-error --max-time 10 http://127.0.0.1:5173/api/health
+      - name: Show service logs on failure
+        if: failure()
+        run: docker compose logs --no-color --tail=100
+      - name: Remove CI containers and volumes
+        if: always()
+        run: docker compose down --volumes --remove-orphans
+
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Scan Git history with redacted output and no network
+        run: |
+          # Gitleaks v8.30.1
+          docker run --rm --network none --read-only --cap-drop ALL \
+            --security-opt no-new-privileges:true --user "$(id -u):$(id -g)" \
+            --env GIT_CONFIG_COUNT=1 --env GIT_CONFIG_KEY_0=safe.directory \
+            --env GIT_CONFIG_VALUE_0=/scan \
+            --volume "$PWD:/scan:ro" \
+            ghcr.io/gitleaks/gitleaks@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f \
+            git /scan --log-opts=--all --redact --no-banner

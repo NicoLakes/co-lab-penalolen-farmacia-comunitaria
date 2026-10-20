@@ -1,0 +1,131 @@
+name: farmacia-comunitaria
+
+x-runtime: &runtime
+  build:
+    context: .
+    dockerfile: infra/local/Dockerfile
+  init: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  stop_grace_period: 20s
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-farmacia}
+      POSTGRES_DB: ${POSTGRES_DB:-farmacia}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Ejecuta pnpm dev}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  migrate:
+    <<: *runtime
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?Ejecuta pnpm dev}
+    command: [pnpm, --filter, '@farmacia/database', 'db:migrate']
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    <<: *runtime
+    environment:
+      HOST: 0.0.0.0
+      PORT: '3001'
+      DATABASE_URL: ${DATABASE_URL:?Ejecuta pnpm dev}
+    command: [pnpm, --filter, api, dev]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "127.0.0.1:${API_PORT:-3001}:3001"
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3001/api/health',{signal:AbortSignal.timeout(3000)}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 3s
+      timeout: 5s
+      start_period: 10s
+      retries: 15
+    develop:
+      watch:
+        - action: sync
+          path: ./apps/api/src
+          target: /workspace/apps/api/src
+          initial_sync: true
+        - action: rebuild
+          path: ./apps/api/package.json
+        - action: rebuild
+          path: ./apps/api/tsconfig.json
+        - action: rebuild
+          path: ./apps/web/package.json
+        - action: rebuild
+          path: ./packages/database
+          ignore: [node_modules/, dist/, '.env*']
+        - action: rebuild
+          path: ./package.json
+        - action: rebuild
+          path: ./pnpm-lock.yaml
+        - action: rebuild
+          path: ./pnpm-workspace.yaml
+        - action: rebuild
+          path: ./tsconfig.base.json
+        - action: rebuild
+          path: ./infra/local/Dockerfile
+
+  web:
+    <<: *runtime
+    environment:
+      API_PROXY_TARGET: http://api:3001
+    command: [pnpm, --filter, web, dev, --host, 0.0.0.0]
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${WEB_PORT:-5173}:5173"
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:5173/',{signal:AbortSignal.timeout(3000)}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 3s
+      timeout: 5s
+      start_period: 10s
+      retries: 15
+    develop:
+      watch:
+        - action: sync
+          path: ./apps/web/src
+          target: /workspace/apps/web/src
+          initial_sync: true
+        - action: sync
+          path: ./apps/web/index.html
+          target: /workspace/apps/web/index.html
+          initial_sync: true
+        - action: sync+restart
+          path: ./apps/web/vite.config.ts
+          target: /workspace/apps/web/vite.config.ts
+        - action: rebuild
+          path: ./apps/web/package.json
+        - action: rebuild
+          path: ./apps/web/tsconfig.json
+        - action: rebuild
+          path: ./apps/api/package.json
+        - action: rebuild
+          path: ./packages/database/package.json
+        - action: rebuild
+          path: ./package.json
+        - action: rebuild
+          path: ./pnpm-lock.yaml
+        - action: rebuild
+          path: ./pnpm-workspace.yaml
+        - action: rebuild
+          path: ./tsconfig.base.json
+        - action: rebuild
+          path: ./infra/local/Dockerfile
+
+volumes:
+  postgres_data:

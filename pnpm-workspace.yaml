@@ -1,0 +1,12 @@
+packages:
+  - apps/*
+  - packages/*
+
+allowBuilds:
+  esbuild: true
+
+strictPeerDependencies: true
+
+overrides:
+  # Drizzle Kit arrastra esbuild vulnerable mediante el cargador antiguo (GHSA-67mh-4wv8-2f99).
+  '@esbuild-kit/core-utils>esbuild': ^0.25.12

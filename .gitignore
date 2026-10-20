@@ -1,0 +1,68 @@
+# Dependencias y almacenes locales de paquetes
+node_modules/
+.pnpm-store/
+.npm/
+
+# Compilación y cachés (en todas las apps y paquetes)
+dist/
+build/
+*.tsbuildinfo
+.vite/
+.vite-temp/
+.cache/
+.eslintcache
+.stylelintcache
+
+# Cobertura y resultados de pruebas
+coverage/
+.nyc_output/
+test-results/
+playwright-report/
+
+# Logs y diagnósticos de Node.js
+logs/
+*.log
+*.log.*
+*.pid
+*.pid.lock
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# Variables de entorno privadas; las plantillas sí se versionan
+.env
+.env.*
+*.env
+!.env.example
+
+# Claves privadas y almacenes de credenciales locales
+*.pem
+*.key
+*.p8
+*.p12
+*.pfx
+*.jks
+
+# Respaldos locales: mantener las migraciones SQL y metadatos de Drizzle
+/backups/
+*.dump
+*.sql.gz
+
+# Configuración personal del editor; conservar ajustes compartibles de VS Code
+.idea/
+**/.vscode/*
+!**/.vscode/extensions.json
+!**/.vscode/settings.json
+!**/.vscode/tasks.json
+!**/.vscode/launch.json
+*.swp
+*.swo
+*~
+*.orig
+
+# Archivos del sistema operativo y temporales
+.DS_Store
+._*
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+tmp/
+temp/

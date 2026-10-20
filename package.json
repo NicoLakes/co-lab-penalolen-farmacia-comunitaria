@@ -1,0 +1,42 @@
+{
+  "name": "colab-farmacia",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.1.2",
+  "engines": {
+    "node": ">=24.0.0",
+    "pnpm": "11.1.2"
+  },
+  "scripts": {
+    "dev": "node infra/local/dev.mjs",
+    "dev:down": "node infra/local/dev.mjs down",
+    "dev:config": "node infra/local/dev.mjs config",
+    "dev:logs": "node infra/local/dev.mjs logs",
+    "dev:web": "pnpm --filter web dev",
+    "dev:api": "pnpm --filter api dev",
+    "build": "pnpm -r build",
+    "start:api": "pnpm --filter api start",
+    "preview:web": "pnpm --filter web preview",
+    "db:up": "node infra/local/dev.mjs database",
+    "db:down": "node infra/local/dev.mjs down",
+    "db:generate": "node infra/local/dev.mjs generate",
+    "db:migrate": "node infra/local/dev.mjs migrate",
+    "db:test": "node infra/local/dev.mjs test",
+    "lint": "eslint . --max-warnings 0",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test && pnpm test:dev",
+    "test:dev": "node --test infra/local/dev.test.mjs",
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^24.19.2",
+    "eslint": "^10.13.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.7",
+    "globals": "^17.13.0",
+    "tsx": "^4.23.15",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.72.0"
+  }
+}
