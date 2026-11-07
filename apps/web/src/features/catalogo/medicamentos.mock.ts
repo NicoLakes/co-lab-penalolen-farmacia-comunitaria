@@ -13,6 +13,11 @@ export interface Medicamento {
   requiereReceta: boolean;
 }
 
+export interface ItemCarrito {
+  medicamento: Medicamento;
+  cantidad: number;
+}
+
 // 2. Datos iniciales sacados del excel municipalidad
 export const MEDICAMENTOS_INICIALES: Medicamento[] = [
   {
