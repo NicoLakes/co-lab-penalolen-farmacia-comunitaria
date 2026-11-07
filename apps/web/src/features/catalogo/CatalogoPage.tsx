@@ -2,12 +2,53 @@ import { useState } from 'react';
 import logoPenalolen from '../../assets/logo-penalolen.png';
 import { MEDICAMENTOS_INICIALES } from './medicamentos.mock';
 import type { Medicamento } from './medicamentos.mock';
+import { CarritoPanel } from './CarritoPanel';
+import type { ItemCarrito } from './CarritoPanel';
 
 export function CatalogoPage() {
   // 1. Estados: memoria que hace interactiva la página
   const [busqueda, setBusqueda] = useState('');
   const [categoriaActiva, setCategoriaActiva] = useState('TODAS');
   const [modoSimple, setModoSimple] = useState(false);
+  const [carrito, setCarrito] = useState<ItemCarrito[]>([]);
+  const [carritoAbierto, setCarritoAbierto] = useState(false);
+
+  function agregarAlCarrito(med: Medicamento) {
+    setCarrito((carritoActual) => {
+      const existe = carritoActual.find((item) => item.medicamento.codigo === med.codigo);
+      if (existe) {
+        return carritoActual.map((item) =>
+          item.medicamento.codigo === med.codigo
+            ? { ...item, cantidad: Math.min(item.cantidad + 1, med.stock) }
+            : item,
+        );
+      }
+      return [...carritoActual, { medicamento: med, cantidad: 1 }];
+    });
+    setCarritoAbierto(true);
+  }
+
+  function cambiarCantidad(codigo: string, nuevaCantidad: number) {
+    if (nuevaCantidad <= 0) {
+      setCarrito((carritoActual) =>
+        carritoActual.filter((item) => item.medicamento.codigo !== codigo),
+      );
+      return;
+    }
+    setCarrito((carritoActual) =>
+      carritoActual.map((item) =>
+        item.medicamento.codigo === codigo
+          ? { ...item, cantidad: Math.min(nuevaCantidad, item.medicamento.stock) }
+          : item,
+      ),
+    );
+  }
+
+  const totalUnidades = carrito.reduce((acc, item) => acc + item.cantidad, 0);
+  const totalPrecio = carrito.reduce(
+    (acc, item) => acc + item.medicamento.precio * item.cantidad,
+    0,
+  );
 
   // 2. Categorías terapéuticas para el filtro
   const categorias = [
@@ -47,14 +88,24 @@ export function CatalogoPage() {
               : 'Consulta disponibilidad, precios solidarios y solicita tus medicamentos en línea.'}
           </p>
         </div>
-        {/* Botón destacado para Adultos Mayores (Requisito US-11 del Inception) */}
-        <button
-          type="button"
-          className={modoSimple ? 'btn-modo-simple activo' : 'btn-modo-simple'}
-          onClick={() => setModoSimple(!modoSimple)}
-        >
-          {modoSimple ? 'Modo Simple Activado (Ver vista estándar)' : 'Activar Modo Simple (Letra Grande)'}
-        </button>
+        {/* Acciones del encabezado: Modo Simple y Carrito */}
+        <div className="header-actions">
+          <button
+            type="button"
+            className={modoSimple ? 'btn-modo-simple activo' : 'btn-modo-simple'}
+            onClick={() => setModoSimple(!modoSimple)}
+          >
+            {modoSimple ? 'Modo Simple Activado (Ver vista estándar)' : 'Activar Modo Simple (Letra Grande)'}
+          </button>
+
+          <button
+            type="button"
+            className="btn-ver-carrito"
+            onClick={() => setCarritoAbierto(!carritoAbierto)}
+          >
+            Mi Carrito ({totalUnidades}) - ${totalPrecio.toLocaleString('es-CL')}
+          </button>
+        </div>
       </header>
 
       {/* Barra de Búsqueda */}
@@ -110,7 +161,11 @@ export function CatalogoPage() {
                 <span className="med-precio">${med.precio.toLocaleString('es-CL')}</span>
                 <span className="med-stock">Stock: {med.stock} disp.</span>
               </div>
-              <button type="button" className="btn-agregar">
+              <button
+                type="button"
+                className="btn-agregar"
+                onClick={() => agregarAlCarrito(med)}
+              >
                 + Agregar al carrito
               </button>
             </div>
@@ -122,6 +177,13 @@ export function CatalogoPage() {
           </p>
         )}
       </section>
+
+      <CarritoPanel
+        carrito={carrito}
+        abierto={carritoAbierto}
+        onCerrar={() => setCarritoAbierto(false)}
+        onCambiarCantidad={cambiarCantidad}
+      />
     </div>
   );
 }
