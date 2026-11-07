@@ -88,7 +88,7 @@ export function CatalogoPage() {
               : 'Consulta disponibilidad, precios solidarios y solicita tus medicamentos en línea.'}
           </p>
         </div>
-        {/* Acciones del encabezado: Modo Simple y Carrito */}
+        {/* Acciones del encabezado: Modo Simple */}
         <div className="header-actions">
           <button
             type="button"
@@ -96,14 +96,6 @@ export function CatalogoPage() {
             onClick={() => setModoSimple(!modoSimple)}
           >
             {modoSimple ? 'Modo Simple Activado (Ver vista estándar)' : 'Activar Modo Simple (Letra Grande)'}
-          </button>
-
-          <button
-            type="button"
-            className="btn-ver-carrito"
-            onClick={() => setCarritoAbierto(!carritoAbierto)}
-          >
-            Mi Carrito ({totalUnidades}) - ${totalPrecio.toLocaleString('es-CL')}
           </button>
         </div>
       </header>
@@ -177,6 +169,36 @@ export function CatalogoPage() {
           </p>
         )}
       </section>
+
+      {/* Botón circular flotante del carrito en la parte inferior derecha */}
+      <button
+        type="button"
+        className={carritoAbierto ? 'btn-carrito-flotante oculto' : 'btn-carrito-flotante'}
+        onClick={() => setCarritoAbierto(!carritoAbierto)}
+        aria-label={`Abrir carrito de compras (${totalUnidades} productos, total $${totalPrecio.toLocaleString('es-CL')})`}
+        aria-expanded={carritoAbierto}
+        title={`Mi Carrito (${totalUnidades}) - $${totalPrecio.toLocaleString('es-CL')}`}
+      >
+        <svg
+          className="icono-carrito"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <circle cx="9" cy="21" r="1.5" />
+          <circle cx="19" cy="21" r="1.5" />
+          <path d="M2.5 3h2.8l2.4 11.4a2 2 0 0 0 2 1.6h9.6a2 2 0 0 0 1.9-1.5L23 6H6.2" />
+        </svg>
+        {totalUnidades > 0 && (
+          <span className="carrito-badge" aria-hidden="true">
+            {totalUnidades}
+          </span>
+        )}
+      </button>
 
       <CarritoPanel
         carrito={carrito}
