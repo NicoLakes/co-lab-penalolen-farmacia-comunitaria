@@ -54,8 +54,8 @@ jobs:
         run: docker compose config --quiet
       - name: Build images, migrate and wait for healthy services
         run: docker compose up --build --wait --wait-timeout 180
-      - name: Test PostgreSQL with independent pools
-        run: docker compose run --rm --no-deps migrate pnpm --filter @farmacia/database test:integration
+      - name: Test PostgreSQL integrity and inventory transactions
+        run: docker compose run --rm --no-deps migrate pnpm test:integration
       - name: Check published web, API and HTTP proxy
         run: |
           curl --fail --silent --show-error --max-time 10 --output /dev/null http://127.0.0.1:5173/

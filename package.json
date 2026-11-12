@@ -25,6 +25,7 @@
     "lint": "eslint . --max-warnings 0",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test && pnpm test:dev",
+    "test:integration": "pnpm --filter @farmacia/database test:integration && pnpm --filter api test:integration",
     "test:dev": "node --test infra/local/dev.test.mjs",
     "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build"
   },

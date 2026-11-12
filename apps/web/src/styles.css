@@ -100,6 +100,81 @@ body {
   border-color: #ffffff;
 }
 
+.portal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.65rem;
+  max-width: 100%;
+}
+
+.account-access summary {
+  display: inline-block;
+  min-height: 44px;
+}
+
+.account-access summary::-webkit-details-marker {
+  display: none;
+}
+
+.account-access-panel {
+  width: min(20rem, 100%);
+  margin-top: 0.6rem;
+  padding: 1rem;
+  border-radius: 0.35rem;
+  background: var(--penalolen-surface);
+  color: var(--penalolen-text);
+  overflow-wrap: anywhere;
+}
+
+.account-access-panel p {
+  margin: 0 0 0.75rem;
+}
+
+.account-access-panel label,
+.account-email {
+  display: block;
+  margin-bottom: 0.35rem;
+  font-weight: 700;
+}
+
+.account-access-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.85rem;
+}
+
+.account-access-panel button {
+  min-height: 44px;
+  font: inherit;
+  font-weight: 700;
+}
+
+.account-access-secondary {
+  border: 0;
+  background: transparent;
+  color: var(--penalolen-blue);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.account-access-panel button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.account-access-panel .account-access-error {
+  margin: 0.75rem 0 0;
+  color: #912222;
+}
+
+.account-access summary:focus-visible,
+.account-access-panel :is(button, input):focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+}
+
 /* Caja blanca superpuesta al banner, igual que el bloque central de penalolen.cl/farmacia */
 .buscador-section {
   position: relative;

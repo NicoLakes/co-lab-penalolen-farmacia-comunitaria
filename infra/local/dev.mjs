@@ -127,6 +127,9 @@ export async function main(mode = 'dev') {
     const containers = output.startsWith('[') ? JSON.parse(output) : output.split('\n').filter(Boolean).map((line) => JSON.parse(line));
     env = await selectPorts(env, containers);
   }
+  if (env.BETTER_AUTH_SECRET && !env.BETTER_AUTH_URL) {
+    env.BETTER_AUTH_URL = `http://127.0.0.1:${env.WEB_PORT}`;
+  }
   let args;
   if (mode === 'dev') {
     console.log(`\nFarmacia Comunitaria\n\n  Web: http://127.0.0.1:${env.WEB_PORT}\n  API: http://127.0.0.1:${env.API_PORT}/api/health\n  PostgreSQL: 127.0.0.1:${env.POSTGRES_PORT}\n`);
@@ -136,7 +139,7 @@ export async function main(mode = 'dev') {
   else if (mode === 'logs') args = ['logs', '--tail=100', '--follow'];
   else if (mode === 'config') args = ['config', '--quiet'];
   else if (mode === 'migrate') args = ['run', '--build', '--rm', 'migrate'];
-  else if (mode === 'test') args = ['run', '--build', '--rm', 'migrate', 'pnpm', '--filter', '@farmacia/database', 'test:integration'];
+  else if (mode === 'test') args = ['run', '--build', '--rm', 'migrate', 'pnpm', 'test:integration'];
   else {
     args = ['run', '--build', '--rm', '--no-deps',
       '--user', `${process.getuid?.() ?? 1000}:${process.getgid?.() ?? 1000}`,

@@ -3,6 +3,11 @@
 Esta guía define dónde agregar código nuevo. La estructura usa pnpm Workspaces
 y conserva las configuraciones y comandos existentes.
 
+Aplicar también los [estándares de ingeniería de AGENTS.md](../AGENTS.md),
+incluidas las convenciones de inglés para código y nuevos nombres de dominio,
+el límite de 1000 líneas por archivo de código escrito o modificado y las reglas
+de compatibilidad para contratos existentes.
+
 ## Base disponible
 
 ```text
@@ -41,7 +46,12 @@ docs/                 # Guías, modelo de datos y decisiones cuando se necesiten
 
 Las carpetas base vacías contienen `.gitkeep` para poder conservarlas en Git.
 Este archivo no tiene comportamiento: retirarlo al agregar el primer archivo
-real en esa carpeta. Los dominios del negocio todavía no están implementados.
+real en esa carpeta.
+
+The API inventory module implements stock operations in
+`apps/api/src/modules/inventory/inventory.service.ts`. Its PostgreSQL tests live
+in `apps/api/test/integration/` and run with `pnpm test:integration`; no inventory
+HTTP routes or reservation workflow are enabled yet.
 
 En la raíz permanecen el README, los manifiestos del workspace, el único
 lockfile, la configuración común de TypeScript/ESLint y Compose de desarrollo.
@@ -49,12 +59,12 @@ Cada app o paquete conserva su `package.json`, configuración propia y tests.
 
 ## Frontend por funcionalidad
 
-Crear `apps/web/src/features/<dominio>/` al implementar una funcionalidad,
-por ejemplo `medicamentos`, `inventario` o `ventas`.
+Crear `apps/web/src/features/<domain>/` al implementar una funcionalidad,
+por ejemplo `medications`, `inventory` o `sales`.
 
 Los componentes, hooks y llamadas HTTP específicos viven dentro de esa
-funcionalidad. Por ejemplo, `features/medicamentos/MedicamentosPage.tsx` y
-`features/medicamentos/medicamentos.api.ts`. Crear subcarpetas solo si el volumen
+funcionalidad. Por ejemplo, `features/medications/MedicationsPage.tsx` y
+`features/medications/medications.api.ts`. Crear subcarpetas solo si el volumen
 de archivos lo justifica.
 
 `components/` contiene elementos visuales utilizados por varias funcionalidades.
@@ -67,15 +77,15 @@ funcionalidades o trasladarlas a un `utils/` genérico.
 
 ## API por módulo
 
-Crear `apps/api/src/modules/<dominio>/` al agregar el comportamiento correspondiente.
+Crear `apps/api/src/modules/<domain>/` al agregar el comportamiento correspondiente.
 Este ejemplo es una convención futura, no una plantilla obligatoria:
 
 ```text
-modules/medicamentos/
-  medicamentos.routes.ts      # Rutas HTTP, autorización y coordinación
-  medicamentos.schemas.ts     # Validación de requests y respuestas públicas
-  medicamentos.service.ts     # Reglas de negocio y casos de uso
-  medicamentos.repository.ts  # Consultas de persistencia del módulo
+modules/medications/
+  medications.routes.ts      # HTTP routes, authorization and coordination
+  medications.schemas.ts     # Request validation and public response schemas
+  medications.service.ts     # Business rules and use cases
+  medications.repository.ts  # Module persistence queries
 ```
 
 Crear un archivo solo cuando tenga una responsabilidad real. Una ruta simple
@@ -103,7 +113,11 @@ desde un caso de uso con una transacción compartida.
 migraciones; las reglas de negocio y consultas específicas de cada módulo
 permanecen en la API.
 
-Agregar tablas y relaciones por dominio en `src/schema/<dominio>.ts` y
+The [initial data model](data-model.md) and [source context](context/README.md)
+define the existing catalog and historical inventory tables, their constraints
+and the decisions still required before importing or adding transactional data.
+
+Agregar tablas y relaciones por dominio en `src/schema/<domain>.ts` y
 exportarlas desde `src/schema/index.ts`. Mantener un único historial de
 migraciones en `migrations/`, incluyendo los metadatos generados.
 
@@ -139,10 +153,11 @@ al workspace no incorpora automáticamente un paquete nuevo al entorno Docker.
 
 ## Nombres, tests y documentación
 
-- Usar nombres de carpetas en minúsculas y `kebab-case` para varias palabras.
+- Usar nombres de archivos y directorios de dominio en inglés; para carpetas,
+  usar minúsculas y `kebab-case` para varias palabras.
   Mantener el mismo nombre de dominio en web, API y esquema cuando corresponda.
 - Usar `PascalCase.tsx` para componentes React y nombres descriptivos con el rol
-  del archivo cuando ayude, como `medicamentos.service.ts`.
+  del archivo cuando ayude, como `medications.service.ts`.
 - Mantener tests en `test/` de cada app o paquete, con sufijo `.test.ts`.
   Los scripts unitarios actuales descubren solo `test/*.test.ts`; colocar allí
   los tests nuevos hasta actualizar explícitamente su descubrimiento.

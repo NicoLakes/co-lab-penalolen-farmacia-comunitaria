@@ -1,0 +1,593 @@
+{
+  "id": "89c2e773-778a-4511-a55e-91dcd4993edd",
+  "prevId": "00000000-0000-0000-0000-000000000000",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.inventory_locations": {
+      "name": "inventory_locations",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "code": {
+          "name": "code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "inventory_locations_name_unique": {
+          "name": "inventory_locations_name_unique",
+          "columns": [
+            {
+              "expression": "lower(btrim(\"name\"))",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "inventory_locations_code_unique": {
+          "name": "inventory_locations_code_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "code"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "inventory_locations_code_not_blank": {
+          "name": "inventory_locations_code_not_blank",
+          "value": "length(\"inventory_locations\".\"code\") > 0 AND \"inventory_locations\".\"code\" = btrim(\"inventory_locations\".\"code\")"
+        },
+        "inventory_locations_name_not_blank": {
+          "name": "inventory_locations_name_not_blank",
+          "value": "length(btrim(\"inventory_locations\".\"name\")) > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.inventory_snapshots": {
+      "name": "inventory_snapshots",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "product_id": {
+          "name": "product_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "location_id": {
+          "name": "location_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "observed_on": {
+          "name": "observed_on",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "quantity": {
+          "name": "quantity",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_sha256": {
+          "name": "source_sha256",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_sheet": {
+          "name": "source_sheet",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_row": {
+          "name": "source_row",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "inventory_snapshots_location_date_idx": {
+          "name": "inventory_snapshots_location_date_idx",
+          "columns": [
+            {
+              "expression": "location_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "observed_on",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "inventory_snapshots_product_id_products_id_fk": {
+          "name": "inventory_snapshots_product_id_products_id_fk",
+          "tableFrom": "inventory_snapshots",
+          "tableTo": "products",
+          "columnsFrom": [
+            "product_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "inventory_snapshots_location_id_inventory_locations_id_fk": {
+          "name": "inventory_snapshots_location_id_inventory_locations_id_fk",
+          "tableFrom": "inventory_snapshots",
+          "tableTo": "inventory_locations",
+          "columnsFrom": [
+            "location_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "inventory_snapshots_product_location_date_unique": {
+          "name": "inventory_snapshots_product_location_date_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "product_id",
+            "location_id",
+            "observed_on"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "inventory_snapshots_quantity_nonnegative": {
+          "name": "inventory_snapshots_quantity_nonnegative",
+          "value": "\"inventory_snapshots\".\"quantity\" >= 0"
+        },
+        "inventory_snapshots_source_sha256_valid": {
+          "name": "inventory_snapshots_source_sha256_valid",
+          "value": "\"inventory_snapshots\".\"source_sha256\" ~ '^[0-9a-f]{64}$'"
+        },
+        "inventory_snapshots_source_sheet_not_blank": {
+          "name": "inventory_snapshots_source_sheet_not_blank",
+          "value": "length(btrim(\"inventory_snapshots\".\"source_sheet\")) > 0"
+        },
+        "inventory_snapshots_source_row_positive": {
+          "name": "inventory_snapshots_source_row_positive",
+          "value": "\"inventory_snapshots\".\"source_row\" > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.monthly_product_consumption": {
+      "name": "monthly_product_consumption",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "product_id": {
+          "name": "product_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "period": {
+          "name": "period",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_quantity": {
+          "name": "source_quantity",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_sha256": {
+          "name": "source_sha256",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_sheet": {
+          "name": "source_sheet",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "source_row": {
+          "name": "source_row",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "monthly_product_consumption_period_idx": {
+          "name": "monthly_product_consumption_period_idx",
+          "columns": [
+            {
+              "expression": "period",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "monthly_product_consumption_product_id_products_id_fk": {
+          "name": "monthly_product_consumption_product_id_products_id_fk",
+          "tableFrom": "monthly_product_consumption",
+          "tableTo": "products",
+          "columnsFrom": [
+            "product_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "monthly_product_consumption_product_period_unique": {
+          "name": "monthly_product_consumption_product_period_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "product_id",
+            "period"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "monthly_product_consumption_period_first_day": {
+          "name": "monthly_product_consumption_period_first_day",
+          "value": "extract(day from \"monthly_product_consumption\".\"period\") = 1"
+        },
+        "monthly_product_consumption_source_sha256_valid": {
+          "name": "monthly_product_consumption_source_sha256_valid",
+          "value": "\"monthly_product_consumption\".\"source_sha256\" ~ '^[0-9a-f]{64}$'"
+        },
+        "monthly_product_consumption_source_sheet_not_blank": {
+          "name": "monthly_product_consumption_source_sheet_not_blank",
+          "value": "length(btrim(\"monthly_product_consumption\".\"source_sheet\")) > 0"
+        },
+        "monthly_product_consumption_source_row_positive": {
+          "name": "monthly_product_consumption_source_row_positive",
+          "value": "\"monthly_product_consumption\".\"source_row\" > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.products": {
+      "name": "products",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "code": {
+          "name": "code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "quantity_unit": {
+          "name": "quantity_unit",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "active_ingredient": {
+          "name": "active_ingredient",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "dosage_form": {
+          "name": "dosage_form",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "presentation": {
+          "name": "presentation",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "supplier_id": {
+          "name": "supplier_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "therapeutic_category_id": {
+          "name": "therapeutic_category_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "requires_prescription": {
+          "name": "requires_prescription",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "products_supplier_idx": {
+          "name": "products_supplier_idx",
+          "columns": [
+            {
+              "expression": "supplier_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "products_therapeutic_category_idx": {
+          "name": "products_therapeutic_category_idx",
+          "columns": [
+            {
+              "expression": "therapeutic_category_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "products_supplier_id_suppliers_id_fk": {
+          "name": "products_supplier_id_suppliers_id_fk",
+          "tableFrom": "products",
+          "tableTo": "suppliers",
+          "columnsFrom": [
+            "supplier_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "products_therapeutic_category_id_therapeutic_categories_id_fk": {
+          "name": "products_therapeutic_category_id_therapeutic_categories_id_fk",
+          "tableFrom": "products",
+          "tableTo": "therapeutic_categories",
+          "columnsFrom": [
+            "therapeutic_category_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "products_code_unique": {
+          "name": "products_code_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "code"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "products_code_not_blank": {
+          "name": "products_code_not_blank",
+          "value": "length(\"products\".\"code\") > 0 AND \"products\".\"code\" = btrim(\"products\".\"code\")"
+        },
+        "products_description_not_blank": {
+          "name": "products_description_not_blank",
+          "value": "length(btrim(\"products\".\"description\")) > 0"
+        },
+        "products_quantity_unit_not_blank": {
+          "name": "products_quantity_unit_not_blank",
+          "value": "length(btrim(\"products\".\"quantity_unit\")) > 0"
+        },
+        "products_active_ingredient_not_blank": {
+          "name": "products_active_ingredient_not_blank",
+          "value": "\"products\".\"active_ingredient\" IS NULL OR length(btrim(\"products\".\"active_ingredient\")) > 0"
+        },
+        "products_dosage_form_not_blank": {
+          "name": "products_dosage_form_not_blank",
+          "value": "\"products\".\"dosage_form\" IS NULL OR length(btrim(\"products\".\"dosage_form\")) > 0"
+        },
+        "products_presentation_not_blank": {
+          "name": "products_presentation_not_blank",
+          "value": "\"products\".\"presentation\" IS NULL OR length(btrim(\"products\".\"presentation\")) > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.suppliers": {
+      "name": "suppliers",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "suppliers_name_unique": {
+          "name": "suppliers_name_unique",
+          "columns": [
+            {
+              "expression": "lower(btrim(\"name\"))",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "suppliers_name_not_blank": {
+          "name": "suppliers_name_not_blank",
+          "value": "length(btrim(\"suppliers\".\"name\")) > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.therapeutic_categories": {
+      "name": "therapeutic_categories",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "therapeutic_categories_name_unique": {
+          "name": "therapeutic_categories_name_unique",
+          "columns": [
+            {
+              "expression": "lower(btrim(\"name\"))",
+              "asc": true,
+              "isExpression": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "therapeutic_categories_name_not_blank": {
+          "name": "therapeutic_categories_name_not_blank",
+          "value": "length(btrim(\"therapeutic_categories\".\"name\")) > 0"
+        }
+      },
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {},
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

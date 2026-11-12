@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import logoPenalolen from '../../assets/logo-penalolen.png';
+import { AccountPanel } from '../auth/AccountPanel';
 import { MEDICAMENTOS_INICIALES } from './medicamentos.mock';
 import type { Medicamento } from './medicamentos.mock';
 
@@ -48,13 +49,16 @@ export function CatalogoPage() {
           </p>
         </div>
         {/* Botón destacado para Adultos Mayores (Requisito US-11 del Inception) */}
-        <button
-          type="button"
-          className={modoSimple ? 'btn-modo-simple activo' : 'btn-modo-simple'}
-          onClick={() => setModoSimple(!modoSimple)}
-        >
-          {modoSimple ? 'Modo Simple Activado (Ver vista estándar)' : 'Activar Modo Simple (Letra Grande)'}
-        </button>
+        <div className="portal-actions">
+          <button
+            type="button"
+            className={modoSimple ? 'btn-modo-simple activo' : 'btn-modo-simple'}
+            onClick={() => setModoSimple(!modoSimple)}
+          >
+            {modoSimple ? 'Modo Simple Activado (Ver vista estándar)' : 'Activar Modo Simple (Letra Grande)'}
+          </button>
+          <AccountPanel />
+        </div>
       </header>
 
       {/* Barra de Búsqueda */}

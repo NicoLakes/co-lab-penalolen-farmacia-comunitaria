@@ -6,7 +6,10 @@ Seguir la [guía de estructura del repositorio](../../docs/estructura.md). Este 
 
 ```text
 src/
-  schema/index.ts    # Esquema vacío; exportar aquí los futuros modelos por dominio
+  schema/index.ts    # Public schema exports
+  schema/products.ts # Products, suppliers and therapeutic categories
+  schema/inventory.ts # Locations, dated stock snapshots and monthly consumption
+  schema/operational-inventory.ts # Lots, live balances and movement ledger
   config.ts         # Validación de la URL sin incluir credenciales en errores
   client.ts         # Creación de Drizzle y pool PostgreSQL
   index.ts          # API pública
@@ -75,7 +78,35 @@ El paquete exporta `createDatabase`, los tipos `Database` y `DatabaseOptions`, y
 3. Revisar el SQL y versionar toda la carpeta `migrations`, incluidos sus metadatos.
 4. Ejecutar `pnpm db:migrate` contra el entorno correspondiente.
 
-El esquema inicial no contiene tablas. No se agrega una migración de dominio ficticia. Drizzle inicializa su historial y no genera SQL si no detecta cambios.
+The initial schema contains six tables: `products`, `suppliers`,
+`therapeutic_categories`, `inventory_locations`, `inventory_snapshots` and
+`monthly_product_consumption`. See the [data model](../../docs/data-model.md)
+for fields, constraints and the [source context](../../docs/context/README.md)
+for data limitations. No source catalog, price, stock or prescription flag is
+automatically imported. Dated stock observations are not live availability.
+
+The commercial catalog adds required `products.name`, optional `description`,
+the `product_sale_condition` enum, `price_clp` and `is_published`. Prices must be
+positive integers when defined. Publication requires a price and a known sale
+condition; new products start unpublished. Checkout is not implemented.
+
+`0002_operational_inventory.sql` adds explicit product tracking modes, active
+locations, lots, balances and append-only movement history. Its hand-reviewed
+triggers enforce cross-table tracking invariants and protect history; Drizzle
+does not generate those triggers. Never remove them when changing the schema.
+Stock operations and availability queries belong to
+`apps/api/src/modules/inventory/`.
+
+`0003_orders_and_reservations.sql` adds external buyer identities, orders,
+immutable lines and events, and stock reservations. Deferred checks reconcile
+the reservation counter, order totals and allocations at commit. Internal
+order operations live in `apps/api/src/modules/orders/`.
+
+`0001_commercial_catalog.sql` removes `requires_prescription` without archiving
+or converting its values, as this application is unreleased. Use a fresh
+development/test database: the new required name has no backfill or default.
+The migration does not reset the local database. Schema callers must provide
+`name` and replace `requiresPrescription` with `saleCondition`.
 
 Las apps comparten un único historial de migraciones. Aplicarlo una sola vez mediante un job de despliegue, antes de arrancar versiones que dependan del nuevo esquema; no migrar automáticamente al iniciar cada app. No modificar migraciones ya aplicadas. Para cambios de esquema que afecten datos existentes, diseñar y revisar la transición antes del despliegue.
 
@@ -93,6 +124,15 @@ El servicio Compose es para desarrollo local. Su usuario inicial tiene permisos 
 pnpm --filter @farmacia/database test:integration
 ```
 
-La prueba de integración solo consulta la base de datos; no crea tablas ni modifica datos. Para ejecutarla completamente en Docker, usar `pnpm db:test` desde la raíz. El workspace fija una versión corregida de `esbuild` para la dependencia transitiva antigua que trae Drizzle Kit (GHSA-67mh-4wv8-2f99).
+Apply migrations before running integration tests. The connection test only
+reads PostgreSQL; schema tests insert synthetic catalog, operational and historical rows
+inside transactions that are rolled back. The migration-chain test also needs
+permission to create an isolated schema, which is rolled back along with its
+tables, enums and trigger functions. Prefer a dedicated test database.
+From the root, `pnpm test:integration` also runs API inventory and order operations,
+including real concurrent transactions in a temporary schema removed afterward.
+`pnpm db:test` runs both suites in Docker after `pnpm db:migrate`.
+The workspace pins a corrected `esbuild` version for the older transitive
+dependency used by Drizzle Kit (GHSA-67mh-4wv8-2f99).
 
 Referencias: [PostgreSQL en Drizzle](https://orm.drizzle.team/docs/get-started-postgresql), [migraciones](https://orm.drizzle.team/docs/migrations), [pool de pg](https://node-postgres.com/apis/pool).

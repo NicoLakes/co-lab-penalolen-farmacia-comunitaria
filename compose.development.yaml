@@ -41,6 +41,16 @@ services:
       HOST: 0.0.0.0
       PORT: '3001'
       DATABASE_URL: ${DATABASE_URL:?Ejecuta pnpm dev}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      ORDER_LOCATION_IDS: ${ORDER_LOCATION_IDS:-}
+      ORDER_RESERVATION_SECONDS: ${ORDER_RESERVATION_SECONDS:-}
+      ORDER_DELIVERY_FEE_CLP: ${ORDER_DELIVERY_FEE_CLP:-}
     command: [pnpm, --filter, api, dev]
     depends_on:
       migrate:

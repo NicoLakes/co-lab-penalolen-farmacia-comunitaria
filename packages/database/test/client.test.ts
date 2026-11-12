@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { createDatabase, schema } from '../src/index.js';
+import { createDatabase } from '../src/index.js';
 import { validateDatabaseUrl } from '../src/config.js';
 
 const connectionString = 'postgresql://localhost/farmacia_test';
@@ -37,7 +37,7 @@ test('crea pools independientes sin conectar durante la construcción', async (t
   assert.equal(first.pool.options.max, 10);
   assert.equal(first.pool.options.connectionTimeoutMillis, 5000);
   assert.ok(first.db);
-  assert.deepEqual(Object.keys(schema), []);
+  assert.ok(first.db.query.products);
 });
 
 test('entrega los errores de conexiones inactivas al consumidor', async (t) => {

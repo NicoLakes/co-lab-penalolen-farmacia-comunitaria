@@ -77,6 +77,7 @@ El workspace autoriza únicamente el script de instalación de `esbuild`, necesa
 | `pnpm lint` | Comprueba ESLint sin advertencias permitidas |
 | `pnpm typecheck` | Comprueba tipos de código, configuración y tests |
 | `pnpm test` | Ejecuta tests de apps y paquetes con el runner de Node |
+| `pnpm test:integration` | Tests PostgreSQL y operaciones de inventario; requiere `DATABASE_URL` y migraciones aplicadas |
 | `pnpm build` | Compila apps y paquetes en sus carpetas `dist/` |
 | `pnpm check` | Ejecuta lint, tipos, tests y build |
 | `pnpm start:api` | Ejecuta la API compilada |
@@ -85,7 +86,7 @@ El workspace autoriza únicamente el script de instalación de `esbuild`, necesa
 | `pnpm db:down` | Alias de `dev:down`; detiene el entorno conservando los datos |
 | `pnpm db:generate` | Genera migraciones en Docker y escribe los archivos en el repositorio |
 | `pnpm db:migrate` | Aplica migraciones desde un contenedor independiente |
-| `pnpm db:test` | Verifica la conexión PostgreSQL desde dos pools dentro de Docker |
+| `pnpm db:test` | Verifica conexión, modelos y operaciones de inventario en PostgreSQL dentro de Docker |
 | `pnpm test:dev` | Comprueba la preparación del entorno y la selección de puertos |
 
 Para ejecutar las verificaciones de forma nativa, instalar las dependencias con `pnpm install --frozen-lockfile` y luego ejecutar `pnpm check`. Las imágenes Docker también usan el lockfile en modo frozen.
@@ -121,7 +122,30 @@ bloquea merges. No necesita `.env.local` ni credenciales de producción.
 
 ## Base de datos compartida
 
-La conexión, el esquema y las migraciones están en `packages/database`. El esquema está vacío hasta definir los modelos de la farmacia. La API actual continúa funcionando sin una base de datos configurada.
+Connection, schema and migrations live in `packages/database`. The initial model
+contains products, suppliers, therapeutic categories, inventory locations,
+dated stock snapshots and monthly consumption observations. It does not import
+the frontend mock or expose new HTTP routes; the current API still runs without
+a configured database.
+
+The commercial product schema includes a required name, optional description,
+sale condition, positive integer CLP price and publication flag. It is not yet
+connected to the public catalog. This unreleased schema change targets a fresh
+database and replaces the old prescription boolean without a compatibility
+layer; see the data model before applying migrations to a populated database.
+
+Operational inventory adds explicit product tracking modes, active locations,
+lots, physical balances and immutable movements. The API module supports
+idempotent openings, receipts, adjustments, atomic transfers and availability
+queries. The order service reserves eligible stock, preserves purchase prices,
+and records sales at fulfillment. Pilot authentication and order permissions
+are configured separately. Payment verification, prescription review and the
+expiry scheduler remain pending.
+
+Read the [project context and source limitations](docs/context/README.md) and
+the [data model and pending decisions](docs/data-model.md) before extending
+these domains. Supplied materials are retained as curated references and a
+catalog extract, excluding personal contacts and screenshots.
 
 `pnpm dev` ya inicia la base de datos y aplica las migraciones. Para trabajar únicamente con la base:
 
@@ -131,7 +155,46 @@ pnpm db:generate
 pnpm db:migrate
 ```
 
+Apply migrations before running `pnpm db:test`. Model fixtures are rolled back;
+inventory service tests use an isolated schema removed afterward, including
+their committed concurrency fixtures. They do not import the reference catalog.
+Prefer a dedicated test database with permission to create schemas.
+
 Ver [configuración, consumo desde otras apps y flujo de migraciones](packages/database/README.md).
+
+## Pilot authentication
+
+Apply migration `0004_authentication.sql` and configure Better Auth and SMTP
+using the settings in `.env.example`. Add the values to `.env.local` for
+`pnpm dev`, or to `apps/api/.env` for the native API. Generate the session
+secret with `openssl rand -hex 32`. Use the origin that serves the web app for
+`BETTER_AUTH_URL`. The Docker launcher derives the loopback origin from the
+selected web port when this setting is omitted. Nonlocal origins require HTTPS.
+
+The catalog's **Iniciar sesión** sends a code to the account's email. After
+the designated administrator signs in and opens their account, run the command
+with the trusted database configuration. In Docker, run it inside the API
+container.
+
+```sh
+pnpm --filter api auth:admin grant admin@example.test
+```
+
+The administrator looks up a verified account using
+`POST /api/admin/users/lookup` with its email. After checking the pharmacy
+register, grant `buyer` using `PUT /api/admin/users/:userId/roles/buyer` and
+revoke it using `DELETE` on the same route. The same routes manage
+`pharmacy_operator`. Use `PATCH /api/admin/users/:userId/status` with
+`{"status":"disabled"}` or `{"status":"active"}` to manage account status.
+These requests use the administrator's session cookie and the web origin.
+The database command also accepts `revoke` for administrator access.
+
+Configure `ORDER_LOCATION_IDS` as comma-separated inventory location UUIDs
+and `ORDER_RESERVATION_SECONDS` to enable pilot order creation. Set
+`ORDER_DELIVERY_FEE_CLP` to the approved fee when applicable. The API exposes
+`GET /api/me` and buyer-scoped routes under `/api/orders`. The pharmacy
+operator uses `/api/fulfillment/orders` for confirmed orders. ClaveÚnica and
+production email delivery require separate setup and verification.
 
 ## Configuración y despliegue
 
@@ -157,6 +220,8 @@ En ejecución nativa, el proceso de la API carga `.env` con Node y Vite carga el
 
 Esta configuración Docker es de desarrollo. En producción, servir `apps/web/dist` mediante un servidor estático y configurar el reverse proxy para que `/api` apunte a la API. El proxy de Vite no forma parte del build ni de `preview:web`. Mantener el mismo origen evita necesitar CORS para esta estructura.
 
-La API base solo expone una comprobación de salud pública. Antes de agregar recursos privados, incorporar autenticación, autorización y validación de entradas en las rutas correspondientes. Los tests de la API usan `inject` y no requieren abrir puertos.
+The public health check is available on every API instance. Configured pilot
+instances also expose login and session-protected order and access management
+routes. The API tests exercise these routes using Fastify's `inject`.
 
 Referencias: [pnpm Workspaces](https://pnpm.io/workspaces), [proxy de desarrollo de Vite](https://vite.dev/config/server-options#server-proxy) y [tests de Fastify](https://fastify.dev/docs/latest/Guides/Testing/).

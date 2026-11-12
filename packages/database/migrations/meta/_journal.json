@@ -1,1 +1,41 @@
-{"version":"7","dialect":"postgresql","entries":[]}
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1793373948760,
+      "tag": "0000_initial_catalog",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1793376127479,
+      "tag": "0001_commercial_catalog",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793377645364,
+      "tag": "0002_operational_inventory",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1794257716130,
+      "tag": "0003_orders_and_reservations",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794446798719,
+      "tag": "0004_authentication",
+      "breakpoints": true
+    }
+  ]
+}
