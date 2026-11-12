@@ -158,10 +158,13 @@ such a lookup provides sufficient authorization for private order information.
   each stock location. Do not default every quantity to boxes or tablets.
 - Confirm the meaning of negative and positive consumption entries, returns,
   corrections and blank months.
-- Confirm stock observation dates, location mapping and whether lot/expiry
-  tracking is required. No lot-level dataset was supplied.
+- Confirm stock observation dates and location mapping. Assign the implemented
+  tracking policy per product and verify lot and expiry values before loading
+  opening balances. The sources contain no lot-level dataset.
 - Obtain a verified retail-price source and prescription policy. Prices,
   stock and prescription flags in the existing frontend mock are not authority.
-- Define authorized roles, patient eligibility, prescription review, payment
-  validation, order transitions, reservation timing and cancellation behavior
-  before creating transactional or personal-data modules.
+- Confirm access to the pharmacy enrollment register. The pilot grants
+  `buyer` after a manual check by authorized staff.
+- Define prescription approval, payment verification, refunds and reservation
+  expiry scheduling for production. The order and inventory states already
+  supported by the pilot are documented in the [current model](../data-model.md).

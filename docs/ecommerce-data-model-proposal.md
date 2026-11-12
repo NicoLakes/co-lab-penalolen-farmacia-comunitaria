@@ -1,11 +1,10 @@
 # Pharmacy ecommerce data model proposal
 
-The commercial catalog, operational inventory and internal order and
-reservation services are implemented. Public checkout, prescriptions and
-payment integration remain proposed work.
-This document records the target purchasing model; the
-[current data model](data-model.md) documents the schema in code. No purchasing
-API or frontend integration has been implemented by the catalog migration.
+The commercial catalog, operational inventory, orders, reservations and
+Better Auth pilot are implemented. The web catalog and local cart use sample
+data. The pilot API supports eligible orders with an authenticated buyer.
+Prescription review, payment integration and web checkout remain proposed.
+See the [current data model](data-model.md) for the implemented schema.
 
 ## Goal and scope
 
@@ -16,8 +15,8 @@ system's operating model or an ongoing source of truth for checkout.
 
 The model separates product definitions, physical stock, reservations, stock
 movements and purchase records. It also supports the prescription review
-needed for applicable products. Authentication, payment provider integration
-and clinical policies still require explicit implementation decisions.
+needed for applicable products. Production identity integration, the payment
+provider and prescription policies still require decisions.
 
 ## Catalog
 
@@ -223,16 +222,19 @@ reservations or stock issues.
 
 ## Prescriptions
 
-`prescriptions` records private file references, the associated order, review
-state, reviewer and review timestamp. Record document type/medium separately
-from the product's `sale_condition`. Items requiring a prescription must be
-associated with their supporting reviewed document. Define the exact item-to-
-document relationship and approval timing before implementing its constraints.
+A purchase request would associate the requested items with private
+prescription files. An authorized operator would record a decision for each
+item, the approved quantity, reviewer and review timestamp. The proposed
+sequence reviews the prescription before creating the order or reserving
+stock. The resulting order items would reference the approvals used for
+checkout. Document medium and the product's `sale_condition` represent
+different attributes.
 
-Prescription contents belong in private storage, with access checked for the
-specific buyer, order and authorized staff. Public file URLs, repository files
-and test fixtures must not contain real prescriptions or patient documents.
-This proposal defines no clinical eligibility or dispensing rules.
+Prescription contents belong in private storage. Access checks must cover
+the specific buyer, request and authorized staff. Use synthetic documents
+in Git and tests. The frontend's experimental text matcher is disconnected
+from the cart and backend. It searches names and text and provides no
+evidence of authenticity or pharmacy approval.
 
 ## Purchase and stock lifecycle
 
@@ -251,12 +253,9 @@ This proposal defines no clinical eligibility or dispensing rules.
    quantity and consume the reservation in the same transaction, exactly once.
 7. Record the corresponding order status event with each successful transition.
 
-For products requiring review, determine the prescription approval stage before
-enabling payment. Do not hold stock indefinitely while waiting for a manual
-review. Payment arriving after reservation expiration must be reconciled with
-current availability rather than silently fulfilling an unreserved order.
-Cancellation after payment requires an explicit refund/reconciliation policy;
-it is not equivalent to expiring an unpaid reservation.
+For products requiring review, obtain approval before checkout revalidates
+stock and starts the payment deadline. A late payment requires reconciliation
+with current availability. A paid cancellation follows the refund policy.
 
 ### Example
 
@@ -290,7 +289,8 @@ instruction to reset databases or to rewrite migrations in a shared deployment.
 
 - Assign the implemented tracking policy per product and verify opening counts.
   Products without required lot information cannot receive operational stock.
-- Define prescription approval timing and its association with order items.
+- Define the request, document and item approval schema for the proposed
+  prescription review before checkout.
 - Verify product-specific sale conditions and the workflows supported for
   simple, retained and stock-controlled retained prescriptions before checkout.
 - Configure the unpaid reservation duration and schedule the implemented expiry batch.

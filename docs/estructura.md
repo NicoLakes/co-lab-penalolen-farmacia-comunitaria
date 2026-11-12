@@ -48,10 +48,10 @@ Las carpetas base vacías contienen `.gitkeep` para poder conservarlas en Git.
 Este archivo no tiene comportamiento: retirarlo al agregar el primer archivo
 real en esa carpeta.
 
-The API inventory module implements stock operations in
-`apps/api/src/modules/inventory/inventory.service.ts`. Its PostgreSQL tests live
-in `apps/api/test/integration/` and run with `pnpm test:integration`; no inventory
-HTTP routes or reservation workflow are enabled yet.
+The web catalog contains the sample catalog and local cart. The auth feature
+adds the account panel. On the API, `inventory` manages stock, `orders` manages
+order and reservation transactions, and `auth` manages Better Auth sessions and
+access. Pilot order and fulfillment routes reuse the transactional services.
 
 En la raíz permanecen el README, los manifiestos del workspace, el único
 lockfile, la configuración común de TypeScript/ESLint y Compose de desarrollo.
@@ -92,10 +92,9 @@ Crear un archivo solo cuando tenga una responsabilidad real. Una ruta simple
 puede comenzar con menos archivos. Mantener reglas de negocio fuera del manejo
 HTTP y separar consultas cuando la complejidad lo requiera.
 
-Registrar rutas y plugins desde `app.ts`, conservando la construcción de la app
-sin abrir puertos para poder probarla con `inject`. Usar `plugins/` para
-integraciones de Fastify, como conexión a base de datos o autenticación, cuando
-se implementen. `server.ts` gestiona el ciclo de vida del proceso.
+`app.ts` construye Fastify sin abrir puertos. `server.ts` configura PostgreSQL
+y SMTP y registra las rutas del piloto cuando la autenticación está habilitada.
+Las pruebas usan el mismo registro de rutas con Fastify `inject`.
 
 Comprobar autenticación y permisos sobre cada recurso protegido en el backend.
 La validación de frontend no reemplaza la validación de entradas en la API.
@@ -113,9 +112,9 @@ desde un caso de uso con una transacción compartida.
 migraciones; las reglas de negocio y consultas específicas de cada módulo
 permanecen en la API.
 
-The [initial data model](data-model.md) and [source context](context/README.md)
-define the existing catalog and historical inventory tables, their constraints
-and the decisions still required before importing or adding transactional data.
+The [current data model](data-model.md) describes the catalog, inventory, orders,
+reservations and authentication. The [source context](context/README.md)
+records operational evidence and decisions still required before importing data.
 
 Agregar tablas y relaciones por dominio en `src/schema/<domain>.ts` y
 exportarlas desde `src/schema/index.ts`. Mantener un único historial de
@@ -161,8 +160,9 @@ al workspace no incorpora automáticamente un paquete nuevo al entorno Docker.
 - Mantener tests en `test/` de cada app o paquete, con sufijo `.test.ts`.
   Los scripts unitarios actuales descubren solo `test/*.test.ts`; colocar allí
   los tests nuevos hasta actualizar explícitamente su descubrimiento.
-- Los tests reales de PostgreSQL viven en `packages/database/test/integration/`
-  y se ejecutan por separado con `pnpm db:test`.
+- Las pruebas de PostgreSQL están en `packages/database/test/integration/` y
+  las de servicios y rutas en `apps/api/test/integration/`. Ejecutar ambas
+  con `pnpm test:integration` o `pnpm db:test` en Docker.
 - Revisar el diff y ejecutar las verificaciones relevantes. `pnpm check`
   ejecuta lint, tipos, tests unitarios y build; no verifica la conexión real a DB.
 - Actualizar el README si cambian comandos o configuración, y esta guía si

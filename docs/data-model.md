@@ -3,9 +3,10 @@
 This document describes the schema currently in code. The intended
 new purchasing system is defined in the [ecommerce data model proposal](ecommerce-data-model-proposal.md),
 which covers orders, payments, operational stock and reservations. The
-commercial catalog, operational stock and internal order lifecycle are
-implemented. Public checkout, payment verification and prescription review
-remain separate stages.
+commercial catalog, operational stock, order lifecycle and Better Auth pilot
+are implemented. The pilot exposes permission-checked order routes. The web
+cart, payment integration and prescription review still need to be connected
+to checkout.
 
 The initial schema stores the product catalog and traceable historical
 observations. It follows the [supplied project context](context/README.md),
@@ -27,6 +28,9 @@ erDiagram
     inventory_locations ||--o{ inventory_balances : holds
     inventory_lots o|--o{ inventory_balances : identifies
     inventory_balances ||--o{ inventory_movements : records
+    auth_users ||--o{ auth_sessions : signs_in
+    auth_users ||--o{ auth_accounts : links
+    users ||--o{ user_roles : has
     users ||--o{ orders : places
     orders ||--|{ order_items : contains
     products ||--o{ order_items : identifies

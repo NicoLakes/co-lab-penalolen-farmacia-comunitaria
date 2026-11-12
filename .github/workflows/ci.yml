@@ -54,7 +54,7 @@ jobs:
         run: docker compose config --quiet
       - name: Build images, migrate and wait for healthy services
         run: docker compose up --build --wait --wait-timeout 180
-      - name: Test PostgreSQL integrity and inventory transactions
+      - name: Test PostgreSQL, inventory, orders and authentication
         run: docker compose run --rm --no-deps migrate pnpm test:integration
       - name: Check published web, API and HTTP proxy
         run: |

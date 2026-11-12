@@ -10,6 +10,9 @@ src/
   schema/products.ts # Products, suppliers and therapeutic categories
   schema/inventory.ts # Locations, dated stock snapshots and monthly consumption
   schema/operational-inventory.ts # Lots, live balances and movement ledger
+  schema/orders.ts  # Orders, snapshots, reservations and events
+  schema/users.ts   # Domain identities and role history
+  schema/auth.ts    # Better Auth identities, accounts, sessions and codes
   config.ts         # Validación de la URL sin incluir credenciales en errores
   client.ts         # Creación de Drizzle y pool PostgreSQL
   index.ts          # API pública
@@ -88,7 +91,12 @@ automatically imported. Dated stock observations are not live availability.
 The commercial catalog adds required `products.name`, optional `description`,
 the `product_sale_condition` enum, `price_clp` and `is_published`. Prices must be
 positive integers when defined. Publication requires a price and a known sale
-condition; new products start unpublished. Checkout is not implemented.
+condition. New products start unpublished.
+
+`0001_commercial_catalog.sql` removes `requires_prescription` and introduces
+the required name without a backfill. Apply this chain to a fresh database or
+verify that an existing development database already applied this migration.
+Callers provide `name` and use `saleCondition`.
 
 `0002_operational_inventory.sql` adds explicit product tracking modes, active
 locations, lots, balances and append-only movement history. Its hand-reviewed
@@ -102,11 +110,9 @@ immutable lines and events, and stock reservations. Deferred checks reconcile
 the reservation counter, order totals and allocations at commit. Internal
 order operations live in `apps/api/src/modules/orders/`.
 
-`0001_commercial_catalog.sql` removes `requires_prescription` without archiving
-or converting its values, as this application is unreleased. Use a fresh
-development/test database: the new required name has no backfill or default.
-The migration does not reset the local database. Schema callers must provide
-`name` and replace `requiresPrescription` with `saleCondition`.
+`0004_authentication.sql` adds the Better Auth storage tables, domain user
+status and auditable role assignments. See the
+[pilot configuration](../../README.md#pilot-authentication) for setup.
 
 Las apps comparten un único historial de migraciones. Aplicarlo una sola vez mediante un job de despliegue, antes de arrancar versiones que dependan del nuevo esquema; no migrar automáticamente al iniciar cada app. No modificar migraciones ya aplicadas. Para cambios de esquema que afecten datos existentes, diseñar y revisar la transición antes del despliegue.
 
@@ -129,8 +135,9 @@ reads PostgreSQL; schema tests insert synthetic catalog, operational and histori
 inside transactions that are rolled back. The migration-chain test also needs
 permission to create an isolated schema, which is rolled back along with its
 tables, enums and trigger functions. Prefer a dedicated test database.
-From the root, `pnpm test:integration` also runs API inventory and order operations,
-including real concurrent transactions in a temporary schema removed afterward.
+From the root, `pnpm test:integration` also runs API inventory and order
+operations, concurrent transactions, and authenticated HTTP access checks in
+temporary schemas.
 `pnpm db:test` runs both suites in Docker after `pnpm db:migrate`.
 The workspace pins a corrected `esbuild` version for the older transitive
 dependency used by Drizzle Kit (GHSA-67mh-4wv8-2f99).

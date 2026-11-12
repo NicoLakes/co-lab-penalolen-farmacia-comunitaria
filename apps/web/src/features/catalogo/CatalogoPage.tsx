@@ -3,12 +3,53 @@ import logoPenalolen from '../../assets/logo-penalolen.png';
 import { AccountPanel } from '../auth/AccountPanel';
 import { MEDICAMENTOS_INICIALES } from './medicamentos.mock';
 import type { Medicamento } from './medicamentos.mock';
+import { CarritoPanel } from './CarritoPanel';
+import type { ItemCarrito } from './CarritoPanel';
 
 export function CatalogoPage() {
   // 1. Estados: memoria que hace interactiva la página
   const [busqueda, setBusqueda] = useState('');
   const [categoriaActiva, setCategoriaActiva] = useState('TODAS');
   const [modoSimple, setModoSimple] = useState(false);
+  const [carrito, setCarrito] = useState<ItemCarrito[]>([]);
+  const [carritoAbierto, setCarritoAbierto] = useState(false);
+
+  function agregarAlCarrito(med: Medicamento) {
+    setCarrito((carritoActual) => {
+      const existe = carritoActual.find((item) => item.medicamento.codigo === med.codigo);
+      if (existe) {
+        return carritoActual.map((item) =>
+          item.medicamento.codigo === med.codigo
+            ? { ...item, cantidad: Math.min(item.cantidad + 1, med.stock) }
+            : item,
+        );
+      }
+      return [...carritoActual, { medicamento: med, cantidad: 1 }];
+    });
+    setCarritoAbierto(true);
+  }
+
+  function cambiarCantidad(codigo: string, nuevaCantidad: number) {
+    if (nuevaCantidad <= 0) {
+      setCarrito((carritoActual) =>
+        carritoActual.filter((item) => item.medicamento.codigo !== codigo),
+      );
+      return;
+    }
+    setCarrito((carritoActual) =>
+      carritoActual.map((item) =>
+        item.medicamento.codigo === codigo
+          ? { ...item, cantidad: Math.min(nuevaCantidad, item.medicamento.stock) }
+          : item,
+      ),
+    );
+  }
+
+  const totalUnidades = carrito.reduce((acc, item) => acc + item.cantidad, 0);
+  const totalPrecio = carrito.reduce(
+    (acc, item) => acc + item.medicamento.precio * item.cantidad,
+    0,
+  );
 
   // 2. Categorías terapéuticas para el filtro
   const categorias = [
@@ -48,8 +89,7 @@ export function CatalogoPage() {
               : 'Consulta disponibilidad, precios solidarios y solicita tus medicamentos en línea.'}
           </p>
         </div>
-        {/* Botón destacado para Adultos Mayores (Requisito US-11 del Inception) */}
-        <div className="portal-actions">
+        <div className="header-actions">
           <button
             type="button"
             className={modoSimple ? 'btn-modo-simple activo' : 'btn-modo-simple'}
@@ -114,7 +154,11 @@ export function CatalogoPage() {
                 <span className="med-precio">${med.precio.toLocaleString('es-CL')}</span>
                 <span className="med-stock">Stock: {med.stock} disp.</span>
               </div>
-              <button type="button" className="btn-agregar">
+              <button
+                type="button"
+                className="btn-agregar"
+                onClick={() => agregarAlCarrito(med)}
+              >
                 + Agregar al carrito
               </button>
             </div>
@@ -126,6 +170,43 @@ export function CatalogoPage() {
           </p>
         )}
       </section>
+
+      {/* Botón circular flotante del carrito en la parte inferior derecha */}
+      <button
+        type="button"
+        className={carritoAbierto ? 'btn-carrito-flotante oculto' : 'btn-carrito-flotante'}
+        onClick={() => setCarritoAbierto(!carritoAbierto)}
+        aria-label={`Abrir carrito de compras (${totalUnidades} productos, total $${totalPrecio.toLocaleString('es-CL')})`}
+        aria-expanded={carritoAbierto}
+        title={`Mi Carrito (${totalUnidades}) - $${totalPrecio.toLocaleString('es-CL')}`}
+      >
+        <svg
+          className="icono-carrito"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <circle cx="9" cy="21" r="1.5" />
+          <circle cx="19" cy="21" r="1.5" />
+          <path d="M2.5 3h2.8l2.4 11.4a2 2 0 0 0 2 1.6h9.6a2 2 0 0 0 1.9-1.5L23 6H6.2" />
+        </svg>
+        {totalUnidades > 0 && (
+          <span className="carrito-badge" aria-hidden="true">
+            {totalUnidades}
+          </span>
+        )}
+      </button>
+
+      <CarritoPanel
+        carrito={carrito}
+        abierto={carritoAbierto}
+        onCerrar={() => setCarritoAbierto(false)}
+        onCambiarCantidad={cambiarCantidad}
+      />
     </div>
   );
 }

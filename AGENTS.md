@@ -27,8 +27,8 @@ instructions. Distinguish confirmed operations, proposals and unresolved decisio
 - No versionar secretos ni modificar migraciones ya aplicadas. Validar entradas
   y autorización en el backend para cada recurso protegido.
 - Revisar el diff y ejecutar las comprobaciones relevantes antes de finalizar.
-  `pnpm check` ejecuta lint, tipos, tests y build; `pnpm db:test` comprueba la
-  conexión real con PostgreSQL y requiere Docker.
+  `pnpm check` ejecuta lint, tipos, tests y build. `pnpm db:test` ejecuta las
+  pruebas de integración de base de datos y API con PostgreSQL en Docker.
 
 ## Estándares de ingeniería
 

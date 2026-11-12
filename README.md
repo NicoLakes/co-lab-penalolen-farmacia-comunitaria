@@ -25,7 +25,7 @@ Las direcciones anteriores son las preferidas. Si otro proyecto ocupa un puerto,
 
 Compose espera a que PostgreSQL esté listo, aplica las migraciones en un servicio independiente y después inicia API y web. Los cambios de código se sincronizan con los contenedores: Vite recarga la interfaz y Node reinicia la API. Los cambios de dependencias reconstruyen las imágenes.
 
-La pantalla inicial incluye un botón para comprobar la conexión con la API. `Ctrl+C` detiene los servicios; `pnpm dev:down` elimina sus contenedores y red, conservando el volumen PostgreSQL.
+La web muestra el catálogo de referencia y un carrito local. Con el piloto de autenticación configurado, también muestra el acceso por correo. `Ctrl+C` detiene los servicios. `pnpm dev:down` elimina sus contenedores y red y conserva el volumen PostgreSQL.
 
 ## Estructura y responsabilidades
 
@@ -33,7 +33,7 @@ La pantalla inicial incluye un botón para comprobar la conexión con la API. `C
 apps/
   web/
     src/
-      features/      # Funcionalidades del negocio, al implementarlas
+      features/      # Catalog, cart and account access
       components/    # Componentes visuales compartidos
       api/           # Acceso HTTP y validación de respuestas externas
       App.tsx        # Interfaz inicial
@@ -42,7 +42,7 @@ apps/
     vite.config.ts
   api/
     src/
-      modules/       # Funcionalidades del negocio, al implementarlas
+      modules/       # Authentication, inventory and orders
       plugins/       # Integraciones de Fastify
       app.ts         # Construcción y rutas de Fastify, sin abrir puertos
       config.ts      # Lectura y validación de configuración
@@ -77,7 +77,7 @@ El workspace autoriza únicamente el script de instalación de `esbuild`, necesa
 | `pnpm lint` | Comprueba ESLint sin advertencias permitidas |
 | `pnpm typecheck` | Comprueba tipos de código, configuración y tests |
 | `pnpm test` | Ejecuta tests de apps y paquetes con el runner de Node |
-| `pnpm test:integration` | Tests PostgreSQL y operaciones de inventario; requiere `DATABASE_URL` y migraciones aplicadas |
+| `pnpm test:integration` | Verifica PostgreSQL, inventario, pedidos, reservas y autenticación con `DATABASE_URL` y las migraciones aplicadas |
 | `pnpm build` | Compila apps y paquetes en sus carpetas `dist/` |
 | `pnpm check` | Ejecuta lint, tipos, tests y build |
 | `pnpm start:api` | Ejecuta la API compilada |
@@ -86,7 +86,7 @@ El workspace autoriza únicamente el script de instalación de `esbuild`, necesa
 | `pnpm db:down` | Alias de `dev:down`; detiene el entorno conservando los datos |
 | `pnpm db:generate` | Genera migraciones en Docker y escribe los archivos en el repositorio |
 | `pnpm db:migrate` | Aplica migraciones desde un contenedor independiente |
-| `pnpm db:test` | Verifica conexión, modelos y operaciones de inventario en PostgreSQL dentro de Docker |
+| `pnpm db:test` | Ejecuta las pruebas de integración de base de datos y API dentro de Docker |
 | `pnpm test:dev` | Comprueba la preparación del entorno y la selección de puertos |
 
 Para ejecutar las verificaciones de forma nativa, instalar las dependencias con `pnpm install --frozen-lockfile` y luego ejecutar `pnpm check`. Las imágenes Docker también usan el lockfile en modo frozen.
@@ -103,7 +103,8 @@ considerar válida una ejecución:
   altas o críticas de dependencias de producción.
 - **Docker integration**: valida Compose, construye las imágenes y levanta
   PostgreSQL 17, migraciones, API y web. Espera sus healthchecks, prueba dos
-  pools PostgreSQL y comprueba los puertos HTTP y el proxy web hacia la API.
+  pools PostgreSQL, las operaciones de inventario y pedidos, y los permisos
+  de Better Auth. También comprueba los puertos HTTP y el proxy web hacia la API.
   Usa el proyecto aislado `farmacia-ci`, credenciales sintéticas y elimina sus
   contenedores y volúmenes al terminar.
 - **Secret scan**: Gitleaks revisa todo el historial Git disponible, con salida
@@ -122,11 +123,10 @@ bloquea merges. No necesita `.env.local` ni credenciales de producción.
 
 ## Base de datos compartida
 
-Connection, schema and migrations live in `packages/database`. The initial model
-contains products, suppliers, therapeutic categories, inventory locations,
-dated stock snapshots and monthly consumption observations. It does not import
-the frontend mock or expose new HTTP routes; the current API still runs without
-a configured database.
+Connection, schema and migrations live in `packages/database`. The initial
+model stores product, location and historical inventory data. The catalog and
+cart shown in the browser use sample data. They are separate from live stock
+and the pilot order API.
 
 The commercial product schema includes a required name, optional description,
 sale condition, positive integer CLP price and publication flag. It is not yet
@@ -138,9 +138,10 @@ Operational inventory adds explicit product tracking modes, active locations,
 lots, physical balances and immutable movements. The API module supports
 idempotent openings, receipts, adjustments, atomic transfers and availability
 queries. The order service reserves eligible stock, preserves purchase prices,
-and records sales at fulfillment. Pilot authentication and order permissions
-are configured separately. Payment verification, prescription review and the
-expiry scheduler remain pending.
+and records sales at fulfillment. The pilot API checks the buyer's role and
+order ownership through Better Auth. Prescription review, payment integration,
+automated reservation expiry and the connection from the web cart to checkout
+remain pending.
 
 Read the [project context and source limitations](docs/context/README.md) and
 the [data model and pending decisions](docs/data-model.md) before extending
@@ -155,10 +156,10 @@ pnpm db:generate
 pnpm db:migrate
 ```
 
-Apply migrations before running `pnpm db:test`. Model fixtures are rolled back;
-inventory service tests use an isolated schema removed afterward, including
-their committed concurrency fixtures. They do not import the reference catalog.
-Prefer a dedicated test database with permission to create schemas.
+Apply migrations before running `pnpm db:test`. Database fixtures are rolled
+back. API tests use isolated schemas that are dropped after their inventory,
+order and authentication tests. Use a dedicated test database with permission
+to create schemas.
 
 Ver [configuración, consumo desde otras apps y flujo de migraciones](packages/database/README.md).
 
