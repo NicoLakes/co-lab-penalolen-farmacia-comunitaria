@@ -4,12 +4,13 @@ import { inventoryBalances, orderItems, orders, orderStatusEvents, products, sto
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { maxClp, normalizeOrderInput, OrderError, orderUuid } from './order-input.js';
 import type { CreateOrderInput, OrderPolicy } from './order-input.js';
-import { findEligibleBalances, lockBalances, supportedSaleConditions } from './order-stock.js';
+import { allowedSaleConditions, findEligibleBalances, lockBalances } from './order-stock.js';
 
 // The buyer ID comes from the backend's authenticated identity mapping.
 export async function createOrder(db: Database, buyerId: string, input: CreateOrderInput, policy: OrderPolicy) {
   const buyer = orderUuid(buyerId);
   const request = normalizeOrderInput(input, policy);
+  const allowedConditions = allowedSaleConditions(request.prescriptionValidated);
   return db.transaction(async (tx) => {
     const retryKey = `order:${buyer}:${request.idempotencyKey}`;
     await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${retryKey}, 0))`);
@@ -37,7 +38,7 @@ export async function createOrder(db: Database, buyerId: string, input: CreateOr
     const catalogById = new Map(catalog.map((product) => [product.id, product]));
     const lines = request.items.map(({ productId, quantity }) => {
       const product = catalogById.get(productId);
-      const saleCondition = supportedSaleConditions.find((condition) => condition === product?.saleCondition);
+      const saleCondition = allowedConditions.find((condition) => condition === product?.saleCondition);
       if (!product?.isPublished || product.priceClp === null || !saleCondition) {
         throw new OrderError('unavailable_product', 'A product is unavailable for this purchase flow');
       }
@@ -53,7 +54,7 @@ export async function createOrder(db: Database, buyerId: string, input: CreateOr
     }
 
     const balancesById = new Map(balances.map((balance) => [balance.id, balance]));
-    const eligible = await findEligibleBalances(tx, balances.map((balance) => balance.id));
+    const eligible = await findEligibleBalances(tx, balances.map((balance) => balance.id), request.prescriptionValidated);
     const byProduct = new Map<string, typeof balances>();
     for (const { id } of eligible) {
       const balance = balancesById.get(id);

@@ -22,6 +22,20 @@ const authActions = [
   { path: '/api/auth/sign-out' },
 ] as const;
 
+function isAllowedOrigin(requestOrigin: string | undefined, expectedOrigin: string): boolean {
+  if (!requestOrigin) return false;
+  if (requestOrigin === expectedOrigin) return true;
+  const reqUrl = URL.parse(requestOrigin);
+  const expUrl = URL.parse(expectedOrigin);
+  const loopbackHosts = ['127.0.0.1', 'localhost', '[::1]'];
+  return Boolean(
+    reqUrl && expUrl
+    && reqUrl.protocol === 'http:' && expUrl.protocol === 'http:'
+    && reqUrl.port === expUrl.port
+    && loopbackHosts.includes(reqUrl.hostname) && loopbackHosts.includes(expUrl.hostname),
+  );
+}
+
 function sendChange(reply: FastifyReply, result: 'ok' | 'forbidden' | 'not_found' | 'conflict') {
   if (result === 'ok') return reply.code(204).send();
   const status = { forbidden: 403, not_found: 404, conflict: 409 }[result];
@@ -29,13 +43,18 @@ function sendChange(reply: FastifyReply, result: 'ok' | 'forbidden' | 'not_found
 }
 
 export function registerAccessRoutes(app: FastifyInstance, options: {
-  db: Database; auth: Auth; origin: string; orderPolicy?: OrderPolicy | undefined;
+  db: Database;
+  auth: Auth;
+  origin: string;
+  orderPolicy?: OrderPolicy | undefined;
+  localDevGrantorId?: string | undefined;
+  readLocalDevCode?: ((email: string) => string | undefined) | undefined;
 }) {
-  const { db, auth, origin, orderPolicy } = options;
+  const { db, auth, origin, orderPolicy, localDevGrantorId, readLocalDevCode } = options;
   app.register(async (api) => {
     api.addHook('onRequest', async (request, reply) => {
       reply.header('Cache-Control', 'no-store');
-      if (request.method !== 'GET' && request.method !== 'HEAD' && request.headers.origin !== origin) {
+      if (request.method !== 'GET' && request.method !== 'HEAD' && !isAllowedOrigin(request.headers.origin, origin)) {
         return reply.code(403).send({ code: 'origin_not_allowed' });
       }
     });
@@ -53,6 +72,7 @@ export function registerAccessRoutes(app: FastifyInstance, options: {
         bodyLimit: 4_096, ...('body' in action && { schema: { body: action.body } }),
       }, async (request, reply) => {
         const headers = fromNodeHeaders(request.headers);
+        headers.set('origin', origin);
         headers.set('x-farmacia-client-ip', request.ip);
         headers.set('content-type', 'application/json');
         headers.delete('content-length');
@@ -64,7 +84,14 @@ export function registerAccessRoutes(app: FastifyInstance, options: {
         const retryAfter = response.headers.get('retry-after');
         if (retryAfter) reply.header('Retry-After', retryAfter);
         await response.body?.cancel();
-        if (response.ok) return { ok: true };
+        if (response.ok) {
+          if (action.path === '/api/auth/email-otp/send-verification-otp' && readLocalDevCode) {
+            const body = request.body as { email?: string } | undefined;
+            const devCode = body?.email ? readLocalDevCode(body.email.trim().toLowerCase()) : undefined;
+            if (devCode) return { ok: true, devCode };
+          }
+          return { ok: true };
+        }
         const code = response.status === 429 ? 'rate_limited' : response.status >= 500 ? 'auth_unavailable' : 'auth_rejected';
         return reply.code(response.status).send({ code });
       });
@@ -81,7 +108,11 @@ export function registerAccessRoutes(app: FastifyInstance, options: {
         reply.code(403).send({ code: 'account_disabled' });
         return;
       }
-      const roles = (await activeRoles(db, user.id)).map(({ role }) => role);
+      let roles = (await activeRoles(db, user.id)).map(({ role }) => role);
+      if (localDevGrantorId && !roles.includes('buyer') && user.id !== localDevGrantorId) {
+        await setUserRole(db, user.id, 'buyer', true, localDevGrantorId);
+        roles = (await activeRoles(db, user.id)).map(({ role }) => role);
+      }
       if (permission && !permits(roles, permission)) {
         reply.code(403).send({ code: 'forbidden' });
         return;

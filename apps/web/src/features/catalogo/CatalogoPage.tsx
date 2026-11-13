@@ -1,20 +1,75 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import logoPenalolen from '../../assets/logo-penalolen.png';
 import { AccountPanel } from '../auth/AccountPanel';
+import type { Account } from '../auth/AccountPanel';
 import { MEDICAMENTOS_INICIALES } from './medicamentos.mock';
 import type { Medicamento } from './medicamentos.mock';
 import { CarritoPanel } from './CarritoPanel';
 import type { ItemCarrito } from './CarritoPanel';
 
+interface CatalogApiResponse {
+  items: {
+    id: string;
+    code: string;
+    name: string;
+    description: string;
+    activeIngredient: string;
+    dosageForm: string;
+    presentation: string;
+    supplier: string;
+    therapeuticCategory: string;
+    priceClp: number;
+    stock: number;
+    requiresPrescription: boolean;
+  }[];
+}
+
 export function CatalogoPage() {
   // 1. Estados: memoria que hace interactiva la página
+  const [medicamentos, setMedicamentos] = useState<Medicamento[]>(MEDICAMENTOS_INICIALES);
+  const [fuenteBaseDatos, setFuenteBaseDatos] = useState(false);
+  const [cuentaActiva, setCuentaActiva] = useState<Account | null>(null);
   const [busqueda, setBusqueda] = useState('');
   const [categoriaActiva, setCategoriaActiva] = useState('TODAS');
   const [modoSimple, setModoSimple] = useState(false);
   const [carrito, setCarrito] = useState<ItemCarrito[]>([]);
   const [carritoAbierto, setCarritoAbierto] = useState(false);
 
+  const cargarCatalogo = useCallback(async (signal?: AbortSignal) => {
+    try {
+      const response = await fetch('/api/catalog', signal ? { signal } : undefined);
+      if (!response.ok) return;
+      const data = (await response.json()) as CatalogApiResponse;
+      if (!data || !Array.isArray(data.items) || data.items.length === 0) return;
+      setMedicamentos(
+        data.items.map((item) => ({
+          id: item.id,
+          codigo: item.code,
+          principioActivo: item.activeIngredient,
+          descriptor: item.description,
+          formaFarmaceutica: item.dosageForm,
+          presentacion: item.presentation,
+          proveedor: item.supplier,
+          clasificacionTerapeutica: item.therapeuticCategory,
+          precio: item.priceClp,
+          stock: item.stock,
+          requiereReceta: item.requiresPrescription,
+        })),
+      );
+      setFuenteBaseDatos(true);
+    } catch {
+      // Si la API no está disponible aún, mantiene el catálogo inicial de respaldo
+    }
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void cargarCatalogo(controller.signal);
+    return () => controller.abort();
+  }, [cargarCatalogo]);
+
   function agregarAlCarrito(med: Medicamento) {
+    if (med.stock <= 0) return;
     setCarrito((carritoActual) => {
       const existe = carritoActual.find((item) => item.medicamento.codigo === med.codigo);
       if (existe) {
@@ -54,11 +109,11 @@ export function CatalogoPage() {
   // 2. Categorías terapéuticas para el filtro
   const categorias = [
     'TODAS',
-    ...Array.from(new Set(MEDICAMENTOS_INICIALES.map((m) => m.clasificacionTerapeutica))),
+    ...Array.from(new Set(medicamentos.map((m) => m.clasificacionTerapeutica))),
   ];
 
   // 3. Filtramos los medicamentos según lo que escribió el vecino y la categoría elegida
-  const medicamentosFiltrados = MEDICAMENTOS_INICIALES.filter((med: Medicamento) => {
+  const medicamentosFiltrados = medicamentos.filter((med: Medicamento) => {
     const texto = busqueda.toLowerCase();
     const coincideTexto =
       med.principioActivo.toLowerCase().includes(texto) ||
@@ -87,6 +142,7 @@ export function CatalogoPage() {
             {modoSimple
               ? 'Paso 1: Escriba el nombre de su remedio abajo para buscarlo.'
               : 'Consulta disponibilidad, precios solidarios y solicita tus medicamentos en línea.'}
+            {fuenteBaseDatos && !modoSimple && ' · Conectado a PostgreSQL en vivo'}
           </p>
         </div>
         <div className="header-actions">
@@ -97,7 +153,7 @@ export function CatalogoPage() {
           >
             {modoSimple ? 'Modo Simple Activado (Ver vista estándar)' : 'Activar Modo Simple (Letra Grande)'}
           </button>
-          <AccountPanel />
+          <AccountPanel onAccountChange={setCuentaActiva} />
         </div>
       </header>
 
@@ -157,9 +213,10 @@ export function CatalogoPage() {
               <button
                 type="button"
                 className="btn-agregar"
+                disabled={med.stock <= 0}
                 onClick={() => agregarAlCarrito(med)}
               >
-                + Agregar al carrito
+                {med.stock > 0 ? '+ Agregar al carrito' : 'Sin stock'}
               </button>
             </div>
           </article>
@@ -204,8 +261,13 @@ export function CatalogoPage() {
       <CarritoPanel
         carrito={carrito}
         abierto={carritoAbierto}
+        usuarioEmail={cuentaActiva?.email}
         onCerrar={() => setCarritoAbierto(false)}
         onCambiarCantidad={cambiarCantidad}
+        onPedidoCreado={() => {
+          setCarrito([]);
+          void cargarCatalogo();
+        }}
       />
     </div>
   );

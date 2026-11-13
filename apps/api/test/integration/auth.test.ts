@@ -156,3 +156,25 @@ test('Better Auth sessions enforce role changes and order ownership at the HTTP 
   assert.equal(signedOut.statusCode, 200);
   assert.equal((await app.inject({ method: 'GET', url: '/api/me', headers: buyer.headers })).statusCode, 401);
 });
+
+
+test('GET /api/catalog exposes seeded pharmacy products and reflects reserved stock', async (t) => {
+  const db = await isolatedDatabase(t);
+  const { ensureInitialCatalog } = await import('../../src/modules/catalog/catalog.service.js');
+  const { registerCatalogRoutes } = await import('../../src/modules/catalog/catalog.routes.js');
+  const seeded = await ensureInitialCatalog(db);
+  assert.ok(seeded.locationId);
+
+  const app = buildApp();
+  t.after(() => app.close());
+  registerCatalogRoutes(app, db);
+
+  const response = await app.inject({ method: 'GET', url: '/api/catalog' });
+  assert.equal(response.statusCode, 200);
+  const payload = response.json<{ items: { id: string; code: string; stock: number; requiresPrescription: boolean }[] }>();
+  assert.equal(payload.items.length, 6);
+  const valproic = payload.items.find((item) => item.code === '1991');
+  assert.ok(valproic);
+  assert.equal(valproic.requiresPrescription, true);
+  assert.equal(valproic.stock, 12);
+});

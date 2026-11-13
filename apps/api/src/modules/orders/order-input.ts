@@ -31,6 +31,7 @@ export interface CreateOrderInput {
   idempotencyKey: string;
   items: readonly { productId: string; quantity: number }[];
   fulfillment: { method: 'pickup' } | { method: 'delivery'; details: DeliveryDetails };
+  prescriptionValidated?: boolean;
 }
 
 // The backend supplies fulfillment locations, delivery pricing and the reservation window.
@@ -77,5 +78,6 @@ export function normalizeOrderInput(input: CreateOrderInput, policy: OrderPolicy
     locationIds: [...new Set(policy.locationIds.map(orderUuid))],
     reservationSeconds: policy.reservationSeconds,
     deliveryFeeClp: method === 'delivery' ? policy.deliveryFeeClp : 0,
+    prescriptionValidated: input.prescriptionValidated === true,
   };
 }

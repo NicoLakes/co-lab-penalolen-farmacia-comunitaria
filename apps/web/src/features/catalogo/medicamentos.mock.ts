@@ -1,5 +1,6 @@
 // 1. Este "interface" es el molde: obliga a que todo medicamento tenga estos campos
 export interface Medicamento {
+  id?: string;                      // UUID interno en la tabla products de PostgreSQL
   codigo: string;                   // Columna Excel: CODIGO
   principioActivo: string;          // Columna Excel: Principio Activo
   descriptor: string;               // Columna Excel: Descriptor 1016
@@ -7,7 +8,7 @@ export interface Medicamento {
   presentacion: string;             // Columna Excel: Presentación
   proveedor: string;                // Columna Excel: Proveedor
   clasificacionTerapeutica: string; // Columna Excel: Clasificación Terapéutica
-  // Campos extra agregados por nosotros:
+  // Campos comerciales y de stock:
   precio: number;
   stock: number;
   requiereReceta: boolean;
@@ -18,7 +19,7 @@ export interface ItemCarrito {
   cantidad: number;
 }
 
-// 2. Datos iniciales sacados del excel municipalidad
+// 2. Datos iniciales sacados del excel municipalidad (respaldo si aún carga la API)
 export const MEDICAMENTOS_INICIALES: Medicamento[] = [
   {
     codigo: '11313',

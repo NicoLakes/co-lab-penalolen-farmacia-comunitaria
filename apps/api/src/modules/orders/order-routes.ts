@@ -23,6 +23,7 @@ const createBody = {
   type: 'object', additionalProperties: false, required: ['idempotencyKey', 'items', 'fulfillment'],
   properties: {
     idempotencyKey: uuidField,
+    prescriptionValidated: { type: 'boolean' },
     items: {
       type: 'array', minItems: 1, maxItems: 100,
       items: {

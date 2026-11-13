@@ -1,9 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 
-interface Account {
+export interface Account {
   email: string;
   roles: string[];
+}
+
+interface AccountPanelProps {
+  onAccountChange?: (account: Account | null) => void;
 }
 
 async function readAccount(signal?: AbortSignal): Promise<Account | 'disabled' | null> {
@@ -26,10 +30,11 @@ function authRequest(path: string, body: object) {
   });
 }
 
-export function AccountPanel() {
+export function AccountPanel({ onAccountChange }: AccountPanelProps = {}) {
   const [account, setAccount] = useState<Account | 'disabled' | null>();
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
+  const [devCodeHint, setDevCodeHint] = useState('');
   const [codeSent, setCodeSent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -38,13 +43,17 @@ export function AccountPanel() {
 
   useEffect(() => {
     const controller = new AbortController();
-    void readAccount(controller.signal).then(setAccount).catch((failure: unknown) => {
+    void readAccount(controller.signal).then((result) => {
+      setAccount(result);
+      onAccountChange?.(result && result !== 'disabled' ? result : null);
+    }).catch((failure: unknown) => {
       if (controller.signal.aborted) return;
       setAccount(null);
+      onAccountChange?.(null);
       setError(failure instanceof Error ? failure.message : 'No pudimos comprobar tu sesión.');
     });
     return () => controller.abort();
-  }, []);
+  }, [onAccountChange]);
 
   useEffect(() => {
     if (codeSent) codeInput.current?.focus();
@@ -68,9 +77,18 @@ export function AccountPanel() {
         const session = await readAccount();
         if (!session || session === 'disabled') throw new Error('No pudimos iniciar sesión. Inténtalo de nuevo.');
         setAccount(session);
+        onAccountChange?.(session);
         setCode('');
+        setDevCodeHint('');
         setCodeSent(false);
       } else {
+        const payload: unknown = await response.json().catch(() => null);
+        if (payload && typeof payload === 'object' && 'devCode' in payload && typeof payload.devCode === 'string') {
+          setDevCodeHint(payload.devCode);
+          setCode(payload.devCode);
+        } else {
+          setDevCodeHint('');
+        }
         setCodeSent(true);
       }
     } catch (failure) {
@@ -87,7 +105,9 @@ export function AccountPanel() {
     try {
       if (!(await authRequest('sign-out', {})).ok) throw new Error();
       setAccount(null);
+      onAccountChange?.(null);
       setEmail('');
+      setDevCodeHint('');
     } catch {
       setError('No pudimos cerrar tu sesión. Inténtalo de nuevo.');
     } finally {
@@ -98,7 +118,7 @@ export function AccountPanel() {
   if (account === undefined || account === 'disabled') return null;
   return (
     <details className="account-access">
-      <summary className="btn-modo-simple">{account ? 'Mi cuenta' : 'Iniciar sesión'}</summary>
+      <summary className="btn-modo-simple">{account ? `Mi cuenta (${account.email})` : 'Iniciar sesión'}</summary>
       <div className="account-access-panel" aria-busy={busy}>
         {account ? (
           <>
@@ -115,6 +135,11 @@ export function AccountPanel() {
             {codeSent ? (
               <>
                 <p role="status">Enviamos un código a <strong>{email}</strong>. Vence en 5 minutos.</p>
+                {devCodeHint && (
+                  <p role="status" className="dev-code-banner">
+                    Modo desarrollo local — Código generado: <strong>{devCodeHint}</strong>
+                  </p>
+                )}
                 <label htmlFor="account-code">Código de acceso</label>
                 <input id="account-code" ref={codeInput} className="input-busqueda" type="text"
                   autoComplete="one-time-code" inputMode="numeric" pattern="[0-9]{6}" maxLength={6}
@@ -136,6 +161,7 @@ export function AccountPanel() {
                 <button type="button" className="account-access-secondary" disabled={busy} onClick={() => {
                   setCodeSent(false);
                   setCode('');
+                  setDevCodeHint('');
                   setError('');
                   requestAnimationFrame(() => emailInput.current?.focus());
                 }}>Volver al correo</button>
