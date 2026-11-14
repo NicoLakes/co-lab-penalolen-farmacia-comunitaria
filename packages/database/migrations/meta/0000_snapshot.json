@@ -1,11 +1,11 @@
 {
-  "id": "89c2e773-778a-4511-a55e-91dcd4993edd",
+  "id": "90c05d0a-cf87-4de2-9a3e-99ac26a26a72",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
-    "public.inventory_locations": {
-      "name": "inventory_locations",
+    "public.medicamentos": {
+      "name": "medicamentos",
       "schema": "",
       "columns": {
         "id": {
@@ -15,477 +15,116 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
-        "code": {
-          "name": "code",
+        "codigo": {
+          "name": "codigo",
           "type": "text",
           "primaryKey": false,
           "notNull": true
         },
-        "name": {
-          "name": "name",
+        "principio_activo": {
+          "name": "principio_activo",
           "type": "text",
           "primaryKey": false,
           "notNull": true
-        }
-      },
-      "indexes": {
-        "inventory_locations_name_unique": {
-          "name": "inventory_locations_name_unique",
-          "columns": [
-            {
-              "expression": "lower(btrim(\"name\"))",
-              "asc": true,
-              "isExpression": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "inventory_locations_code_unique": {
-          "name": "inventory_locations_code_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "code"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "inventory_locations_code_not_blank": {
-          "name": "inventory_locations_code_not_blank",
-          "value": "length(\"inventory_locations\".\"code\") > 0 AND \"inventory_locations\".\"code\" = btrim(\"inventory_locations\".\"code\")"
         },
-        "inventory_locations_name_not_blank": {
-          "name": "inventory_locations_name_not_blank",
-          "value": "length(btrim(\"inventory_locations\".\"name\")) > 0"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.inventory_snapshots": {
-      "name": "inventory_snapshots",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "product_id": {
-          "name": "product_id",
-          "type": "uuid",
+        "descriptor": {
+          "name": "descriptor",
+          "type": "text",
           "primaryKey": false,
           "notNull": true
         },
-        "location_id": {
-          "name": "location_id",
-          "type": "uuid",
+        "forma_farmaceutica": {
+          "name": "forma_farmaceutica",
+          "type": "text",
           "primaryKey": false,
           "notNull": true
         },
-        "observed_on": {
-          "name": "observed_on",
-          "type": "date",
+        "presentacion": {
+          "name": "presentacion",
+          "type": "text",
           "primaryKey": false,
           "notNull": true
         },
-        "quantity": {
-          "name": "quantity",
+        "proveedor": {
+          "name": "proveedor",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "clasificacion_terapeutica": {
+          "name": "clasificacion_terapeutica",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "precio": {
+          "name": "precio",
           "type": "integer",
           "primaryKey": false,
           "notNull": true
         },
-        "source_sha256": {
-          "name": "source_sha256",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "source_sheet": {
-          "name": "source_sheet",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "source_row": {
-          "name": "source_row",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {
-        "inventory_snapshots_location_date_idx": {
-          "name": "inventory_snapshots_location_date_idx",
-          "columns": [
-            {
-              "expression": "location_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "observed_on",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "inventory_snapshots_product_id_products_id_fk": {
-          "name": "inventory_snapshots_product_id_products_id_fk",
-          "tableFrom": "inventory_snapshots",
-          "tableTo": "products",
-          "columnsFrom": [
-            "product_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        },
-        "inventory_snapshots_location_id_inventory_locations_id_fk": {
-          "name": "inventory_snapshots_location_id_inventory_locations_id_fk",
-          "tableFrom": "inventory_snapshots",
-          "tableTo": "inventory_locations",
-          "columnsFrom": [
-            "location_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "inventory_snapshots_product_location_date_unique": {
-          "name": "inventory_snapshots_product_location_date_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "product_id",
-            "location_id",
-            "observed_on"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "inventory_snapshots_quantity_nonnegative": {
-          "name": "inventory_snapshots_quantity_nonnegative",
-          "value": "\"inventory_snapshots\".\"quantity\" >= 0"
-        },
-        "inventory_snapshots_source_sha256_valid": {
-          "name": "inventory_snapshots_source_sha256_valid",
-          "value": "\"inventory_snapshots\".\"source_sha256\" ~ '^[0-9a-f]{64}$'"
-        },
-        "inventory_snapshots_source_sheet_not_blank": {
-          "name": "inventory_snapshots_source_sheet_not_blank",
-          "value": "length(btrim(\"inventory_snapshots\".\"source_sheet\")) > 0"
-        },
-        "inventory_snapshots_source_row_positive": {
-          "name": "inventory_snapshots_source_row_positive",
-          "value": "\"inventory_snapshots\".\"source_row\" > 0"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.monthly_product_consumption": {
-      "name": "monthly_product_consumption",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "product_id": {
-          "name": "product_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "period": {
-          "name": "period",
-          "type": "date",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "source_quantity": {
-          "name": "source_quantity",
+        "stock": {
+          "name": "stock",
           "type": "integer",
           "primaryKey": false,
           "notNull": true
         },
-        "source_sha256": {
-          "name": "source_sha256",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "source_sheet": {
-          "name": "source_sheet",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "source_row": {
-          "name": "source_row",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {
-        "monthly_product_consumption_period_idx": {
-          "name": "monthly_product_consumption_period_idx",
-          "columns": [
-            {
-              "expression": "period",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "monthly_product_consumption_product_id_products_id_fk": {
-          "name": "monthly_product_consumption_product_id_products_id_fk",
-          "tableFrom": "monthly_product_consumption",
-          "tableTo": "products",
-          "columnsFrom": [
-            "product_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "monthly_product_consumption_product_period_unique": {
-          "name": "monthly_product_consumption_product_period_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "product_id",
-            "period"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "monthly_product_consumption_period_first_day": {
-          "name": "monthly_product_consumption_period_first_day",
-          "value": "extract(day from \"monthly_product_consumption\".\"period\") = 1"
-        },
-        "monthly_product_consumption_source_sha256_valid": {
-          "name": "monthly_product_consumption_source_sha256_valid",
-          "value": "\"monthly_product_consumption\".\"source_sha256\" ~ '^[0-9a-f]{64}$'"
-        },
-        "monthly_product_consumption_source_sheet_not_blank": {
-          "name": "monthly_product_consumption_source_sheet_not_blank",
-          "value": "length(btrim(\"monthly_product_consumption\".\"source_sheet\")) > 0"
-        },
-        "monthly_product_consumption_source_row_positive": {
-          "name": "monthly_product_consumption_source_row_positive",
-          "value": "\"monthly_product_consumption\".\"source_row\" > 0"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.products": {
-      "name": "products",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "code": {
-          "name": "code",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "description": {
-          "name": "description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "quantity_unit": {
-          "name": "quantity_unit",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "active_ingredient": {
-          "name": "active_ingredient",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "dosage_form": {
-          "name": "dosage_form",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "presentation": {
-          "name": "presentation",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "supplier_id": {
-          "name": "supplier_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "therapeutic_category_id": {
-          "name": "therapeutic_category_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "requires_prescription": {
-          "name": "requires_prescription",
+        "requiere_receta": {
+          "name": "requiere_receta",
           "type": "boolean",
           "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "products_supplier_idx": {
-          "name": "products_supplier_idx",
-          "columns": [
-            {
-              "expression": "supplier_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
+          "notNull": true,
+          "default": false
         },
-        "products_therapeutic_category_idx": {
-          "name": "products_therapeutic_category_idx",
-          "columns": [
-            {
-              "expression": "therapeutic_category_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "products_supplier_id_suppliers_id_fk": {
-          "name": "products_supplier_id_suppliers_id_fk",
-          "tableFrom": "products",
-          "tableTo": "suppliers",
-          "columnsFrom": [
-            "supplier_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
+        "activo": {
+          "name": "activo",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
         },
-        "products_therapeutic_category_id_therapeutic_categories_id_fk": {
-          "name": "products_therapeutic_category_id_therapeutic_categories_id_fk",
-          "tableFrom": "products",
-          "tableTo": "therapeutic_categories",
-          "columnsFrom": [
-            "therapeutic_category_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
+        "creado_en": {
+          "name": "creado_en",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "actualizado_en": {
+          "name": "actualizado_en",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
         }
       },
+      "indexes": {},
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "products_code_unique": {
-          "name": "products_code_unique",
+        "medicamentos_codigo_unique": {
+          "name": "medicamentos_codigo_unique",
           "nullsNotDistinct": false,
           "columns": [
-            "code"
+            "codigo"
           ]
         }
       },
       "policies": {},
       "checkConstraints": {
-        "products_code_not_blank": {
-          "name": "products_code_not_blank",
-          "value": "length(\"products\".\"code\") > 0 AND \"products\".\"code\" = btrim(\"products\".\"code\")"
+        "medicamentos_precio_positivo": {
+          "name": "medicamentos_precio_positivo",
+          "value": "\"medicamentos\".\"precio\" >= 0"
         },
-        "products_description_not_blank": {
-          "name": "products_description_not_blank",
-          "value": "length(btrim(\"products\".\"description\")) > 0"
-        },
-        "products_quantity_unit_not_blank": {
-          "name": "products_quantity_unit_not_blank",
-          "value": "length(btrim(\"products\".\"quantity_unit\")) > 0"
-        },
-        "products_active_ingredient_not_blank": {
-          "name": "products_active_ingredient_not_blank",
-          "value": "\"products\".\"active_ingredient\" IS NULL OR length(btrim(\"products\".\"active_ingredient\")) > 0"
-        },
-        "products_dosage_form_not_blank": {
-          "name": "products_dosage_form_not_blank",
-          "value": "\"products\".\"dosage_form\" IS NULL OR length(btrim(\"products\".\"dosage_form\")) > 0"
-        },
-        "products_presentation_not_blank": {
-          "name": "products_presentation_not_blank",
-          "value": "\"products\".\"presentation\" IS NULL OR length(btrim(\"products\".\"presentation\")) > 0"
+        "medicamentos_stock_no_negativo": {
+          "name": "medicamentos_stock_no_negativo",
+          "value": "\"medicamentos\".\"stock\" >= 0"
         }
       },
       "isRLSEnabled": false
     },
-    "public.suppliers": {
-      "name": "suppliers",
+    "public.sesiones": {
+      "name": "sesiones",
       "schema": "",
       "columns": {
         "id": {
@@ -495,44 +134,64 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
-        "name": {
-          "name": "name",
+        "token_hash": {
+          "name": "token_hash",
           "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "usuario_id": {
+          "name": "usuario_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "creada_en": {
+          "name": "creada_en",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "expira_en": {
+          "name": "expira_en",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true
         }
       },
-      "indexes": {
-        "suppliers_name_unique": {
-          "name": "suppliers_name_unique",
-          "columns": [
-            {
-              "expression": "lower(btrim(\"name\"))",
-              "asc": true,
-              "isExpression": true,
-              "nulls": "last"
-            }
+      "indexes": {},
+      "foreignKeys": {
+        "sesiones_usuario_id_usuarios_id_fk": {
+          "name": "sesiones_usuario_id_usuarios_id_fk",
+          "tableFrom": "sesiones",
+          "tableTo": "usuarios",
+          "columnsFrom": [
+            "usuario_id"
           ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
         }
       },
-      "foreignKeys": {},
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "suppliers_name_not_blank": {
-          "name": "suppliers_name_not_blank",
-          "value": "length(btrim(\"suppliers\".\"name\")) > 0"
+      "uniqueConstraints": {
+        "sesiones_token_hash_unique": {
+          "name": "sesiones_token_hash_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "token_hash"
+          ]
         }
       },
+      "policies": {},
+      "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.therapeutic_categories": {
-      "name": "therapeutic_categories",
+    "public.usuarios": {
+      "name": "usuarios",
       "schema": "",
       "columns": {
         "id": {
@@ -542,38 +201,227 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
-        "name": {
-          "name": "name",
+        "email": {
+          "name": "email",
           "type": "text",
           "primaryKey": false,
           "notNull": true
+        },
+        "nombre": {
+          "name": "nombre",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "password_hash": {
+          "name": "password_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "rol": {
+          "name": "rol",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'funcionario'"
+        },
+        "activo": {
+          "name": "activo",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "creado_en": {
+          "name": "creado_en",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
         }
       },
-      "indexes": {
-        "therapeutic_categories_name_unique": {
-          "name": "therapeutic_categories_name_unique",
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "usuarios_email_unique": {
+          "name": "usuarios_email_unique",
+          "nullsNotDistinct": false,
           "columns": [
-            {
-              "expression": "lower(btrim(\"name\"))",
-              "asc": true,
-              "isExpression": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
+            "email"
+          ]
         }
       },
+      "policies": {},
+      "checkConstraints": {
+        "usuarios_rol_valido": {
+          "name": "usuarios_rol_valido",
+          "value": "\"usuarios\".\"rol\" in ('admin', 'funcionario')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.pedido_historial": {
+      "name": "pedido_historial",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "pedido_id": {
+          "name": "pedido_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "estado": {
+          "name": "estado",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "responsable": {
+          "name": "responsable",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "registrado_en": {
+          "name": "registrado_en",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "pedido_historial_pedido_id_pedidos_id_fk": {
+          "name": "pedido_historial_pedido_id_pedidos_id_fk",
+          "tableFrom": "pedido_historial",
+          "tableTo": "pedidos",
+          "columnsFrom": [
+            "pedido_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "pedido_historial_estado_valido": {
+          "name": "pedido_historial_estado_valido",
+          "value": "\"pedido_historial\".\"estado\" in ('RECIBIDO', 'EN_PREPARACION', 'LISTO_PARA_RETIRO', 'EN_DESPACHO', 'ENTREGADO', 'CANCELADO')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.pedidos": {
+      "name": "pedidos",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "numero": {
+          "name": "numero",
+          "type": "serial",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "cliente_nombre": {
+          "name": "cliente_nombre",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "contacto": {
+          "name": "contacto",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "modalidad": {
+          "name": "modalidad",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "direccion": {
+          "name": "direccion",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "estado": {
+          "name": "estado",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'RECIBIDO'"
+        },
+        "items": {
+          "name": "items",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "total": {
+          "name": "total",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "creado_en": {
+          "name": "creado_en",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "actualizado_en": {
+          "name": "actualizado_en",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
-        "therapeutic_categories_name_not_blank": {
-          "name": "therapeutic_categories_name_not_blank",
-          "value": "length(btrim(\"therapeutic_categories\".\"name\")) > 0"
+        "pedidos_modalidad_valida": {
+          "name": "pedidos_modalidad_valida",
+          "value": "\"pedidos\".\"modalidad\" in ('RETIRO', 'DELIVERY')"
+        },
+        "pedidos_estado_valido": {
+          "name": "pedidos_estado_valido",
+          "value": "\"pedidos\".\"estado\" in ('RECIBIDO', 'EN_PREPARACION', 'LISTO_PARA_RETIRO', 'EN_DESPACHO', 'ENTREGADO', 'CANCELADO')"
+        },
+        "pedidos_total_no_negativo": {
+          "name": "pedidos_total_no_negativo",
+          "value": "\"pedidos\".\"total\" >= 0"
+        },
+        "pedidos_direccion_requerida_en_delivery": {
+          "name": "pedidos_direccion_requerida_en_delivery",
+          "value": "(\"pedidos\".\"modalidad\" = 'DELIVERY' AND \"pedidos\".\"direccion\" IS NOT NULL) OR \"pedidos\".\"modalidad\" = 'RETIRO'"
         }
       },
       "isRLSEnabled": false

@@ -64,12 +64,16 @@ body {
   padding: 0.45rem 0.85rem;
   border-radius: 0.35rem;
   margin-bottom: 0.35rem;
+  line-height: 0;
 }
 
+/* El logo es PNG con fondo transparente: su propio fondo siempre es blanco,
+   aunque se muestre sin el recuadro. */
 .logo-muni {
   height: 44px;
   width: auto;
   display: block;
+  background: #ffffff;
 }
 
 .portal-header h1 {
@@ -299,6 +303,23 @@ body {
 .tag-receta.libre {
   background: #e8f5ee;
   color: #1f6b43;
+}
+
+/* Medicamento autorizado por una receta aceptada del vecino con sesión */
+.med-receta-indicada {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: -0.35rem 0 0.6rem;
+  font-size: 0.78em;
+  color: #146c43;
+}
+
+.tag-receta.indicada {
+  background: #dff3e4;
+  color: #146c43;
+  border: 1px solid #a9d9b8;
 }
 
 .med-titulo {
@@ -629,4 +650,1190 @@ body {
 
 .btn-continuar-checkout:hover {
   background: var(--penalolen-navy);
+}
+
+
+/* ===== Estados de carga / error / vacío (catálogo desde la API) ===== */
+.estado-carga,
+.sin-resultados,
+.carrito-vacio {
+  grid-column: 1 / -1;
+  text-align: center;
+  color: var(--penalolen-text-muted);
+  padding: 2.5rem 1rem;
+  font-size: 1.05em;
+}
+
+.estado-error {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 2rem 1rem;
+  background: #fdecec;
+  border: 1px solid #e6b3b3;
+  border-radius: 0.5rem;
+  color: #8a1f1f;
+}
+
+.estado-error p {
+  margin: 0 0 1rem;
+}
+
+.btn-reintentar {
+  background: var(--penalolen-blue);
+  color: #ffffff;
+  border: none;
+  padding: 0.6rem 1.4rem;
+  border-radius: 0.35rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.btn-reintentar:hover {
+  background: var(--penalolen-navy);
+}
+
+/* ===== Acceso al panel de funcionarios ===== */
+.btn-admin {
+  display: inline-block;
+  background: transparent;
+  color: var(--penalolen-blue);
+  border: 1px solid var(--penalolen-blue);
+  padding: 0.45rem 0.9rem;
+  border-radius: 0.35rem;
+  font-weight: 600;
+  font-size: 0.9em;
+  text-decoration: none;
+}
+
+.btn-admin:hover {
+  background: var(--penalolen-blue);
+  color: #ffffff;
+}
+
+/* ===== Checkout mínimo desde el carrito ===== */
+.checkout-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 1rem 0 0;
+  border-top: 1px solid var(--penalolen-border);
+}
+
+.checkout-form h3 {
+  margin: 0 0 0.5rem;
+}
+
+.checkout-form label {
+  font-size: 0.9em;
+  font-weight: 600;
+  margin-top: 0.5rem;
+}
+
+.checkout-form input[type='text'],
+.checkout-form input[type='email'] {
+  padding: 0.6rem;
+  border: 1px solid var(--penalolen-border);
+  border-radius: 0.35rem;
+  font-size: 1em;
+}
+
+.checkout-form input:focus-visible {
+  outline: 2px solid var(--penalolen-blue);
+  outline-offset: 1px;
+}
+
+.checkout-modalidad {
+  border: 1px solid var(--penalolen-border);
+  border-radius: 0.35rem;
+  padding: 0.6rem 0.8rem;
+  margin: 0.6rem 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.checkout-modalidad legend {
+  font-size: 0.9em;
+  font-weight: 600;
+  padding: 0 0.3rem;
+}
+
+.checkout-modalidad label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 400;
+  margin-top: 0;
+}
+
+.checkout-error {
+  background: #fdecec;
+  border: 1px solid #e6b3b3;
+  color: #8a1f1f;
+  padding: 0.6rem 0.8rem;
+  border-radius: 0.35rem;
+  font-size: 0.92em;
+  margin: 0.5rem 0;
+}
+
+.btn-volver-carrito {
+  width: 100%;
+  background: transparent;
+  color: var(--penalolen-blue);
+  border: 1px solid var(--penalolen-blue);
+  padding: 0.7rem;
+  border-radius: 0.35rem;
+  font-weight: 700;
+  font-size: 0.95em;
+  cursor: pointer;
+  margin-top: 0.5rem;
+}
+
+.btn-volver-carrito:hover {
+  background: rgba(2, 81, 192, 0.08);
+}
+
+.checkout-exito {
+  padding: 1.5rem 0.5rem;
+  text-align: center;
+}
+
+.checkout-exito h3 {
+  color: #1c7c3a;
+  margin-top: 0;
+}
+
+/* ===== Panel de administración ===== */
+.admin-shell {
+  max-width: 1480px;
+  margin: 0 auto;
+  padding: 0 1.75rem 3rem;
+}
+
+.admin-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  background: var(--penalolen-navy);
+  color: #ffffff;
+  margin: 0 -1.75rem 1.5rem;
+  padding: 1rem 1.75rem;
+}
+
+.admin-marca {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+}
+
+.admin-marca .logo-muni-wrap {
+  margin-bottom: 0;
+}
+
+.admin-marca h1 {
+  font-size: 1.3em;
+  margin: 0;
+}
+
+.admin-marca p {
+  margin: 0;
+  font-size: 0.9em;
+  opacity: 0.85;
+}
+
+/* Sobre el banner navy los botones van en blanco: el azul no tiene contraste. */
+.portal-header .btn-admin,
+.admin-header .btn-admin {
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.65);
+}
+
+.portal-header .btn-admin:hover,
+.admin-header .btn-admin:hover {
+  background: #ffffff;
+  color: var(--penalolen-navy);
+}
+
+.login-admin {
+  max-width: 420px;
+  margin: 2rem auto;
+  background: var(--penalolen-surface);
+  border: 1px solid var(--penalolen-border);
+  border-radius: 0.6rem;
+  padding: 1.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  box-shadow: 0 6px 24px rgba(34, 41, 87, 0.08);
+}
+
+.login-admin h2 {
+  margin: 0;
+}
+
+.login-ayuda {
+  color: var(--penalolen-text-muted);
+  font-size: 0.92em;
+  margin: 0 0 0.5rem;
+}
+
+.login-admin label {
+  font-weight: 600;
+  font-size: 0.9em;
+  margin-top: 0.5rem;
+}
+
+.login-admin input {
+  padding: 0.65rem;
+  border: 1px solid var(--penalolen-border);
+  border-radius: 0.35rem;
+  font-size: 1em;
+}
+
+.btn-admin-primario {
+  background: var(--penalolen-blue);
+  color: #ffffff;
+  border: none;
+  padding: 0.7rem 1.2rem;
+  border-radius: 0.35rem;
+  font-weight: 700;
+  font-size: 1em;
+  cursor: pointer;
+  margin-top: 0.75rem;
+}
+
+.btn-admin-primario:hover {
+  background: var(--penalolen-navy);
+}
+
+.btn-admin-primario:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.admin-barra-sesion {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.25rem;
+}
+
+.admin-tabs {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.tab {
+  background: var(--penalolen-surface);
+  border: 1px solid var(--penalolen-border);
+  color: var(--penalolen-text-muted);
+  padding: 0.6rem 1.3rem;
+  border-radius: 0.35rem;
+  font-weight: 700;
+  font-size: 0.95em;
+  cursor: pointer;
+}
+
+.tab.activo {
+  background: var(--penalolen-navy);
+  border-color: var(--penalolen-navy);
+  color: #ffffff;
+}
+
+.admin-usuario {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--penalolen-text-muted);
+  font-size: 0.95em;
+}
+
+.panel-barra {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.panel-controles {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.panel-barra h2 {
+  margin: 0;
+  font-size: 1.15em;
+}
+
+.panel-barra .btn-admin-primario {
+  margin-top: 0;
+}
+
+/* ===== Tabla de medicamentos ===== */
+.alta-medicamento {
+  background: var(--penalolen-surface);
+  border: 1px solid var(--penalolen-border);
+  border-radius: 0.5rem;
+  padding: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.alta-campos {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.75rem;
+}
+
+.alta-campos label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.88em;
+  font-weight: 600;
+}
+
+.alta-campos input {
+  padding: 0.5rem;
+  border: 1px solid var(--penalolen-border);
+  border-radius: 0.35rem;
+  font-size: 0.95em;
+}
+
+.alta-campos .checkbox-receta {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+  align-self: end;
+  padding-bottom: 0.5rem;
+}
+
+.tabla-scroll {
+  overflow-x: auto;
+  background: var(--penalolen-surface);
+  border: 1px solid var(--penalolen-border);
+  border-radius: 0.5rem;
+}
+
+.tabla-admin {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.93em;
+}
+
+.tabla-admin th,
+.tabla-admin td {
+  padding: 0.7rem 0.8rem;
+  text-align: left;
+  border-bottom: 1px solid var(--penalolen-border);
+  vertical-align: middle;
+}
+
+.tabla-admin thead th {
+  background: var(--penalolen-navy);
+  color: #ffffff;
+  font-size: 0.85em;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  position: sticky;
+  top: 0;
+}
+
+.tabla-admin tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.tabla-admin tbody tr:hover {
+  background: #f4f7fd;
+}
+
+.tabla-admin small {
+  color: var(--penalolen-text-muted);
+}
+
+.fila-inactiva {
+  opacity: 0.55;
+}
+
+.celda-input {
+  width: 6.5rem;
+  padding: 0.35rem;
+  border: 1px solid var(--penalolen-border);
+  border-radius: 0.3rem;
+}
+
+.tabla-admin th.celda-estado,
+.tabla-admin td.celda-estado {
+  text-align: center;
+}
+
+.tabla-admin td.celda-estado .chip {
+  white-space: nowrap;
+}
+
+.celda-acciones {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.btn-tabla {
+  background: var(--penalolen-surface);
+  border: 1px solid var(--penalolen-blue);
+  color: var(--penalolen-blue);
+  padding: 0.35rem 0.7rem;
+  border-radius: 0.3rem;
+  font-size: 0.85em;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btn-tabla:hover {
+  background: var(--penalolen-blue);
+  color: #ffffff;
+}
+
+.btn-tabla.peligro {
+  border-color: #c0392b;
+  color: #c0392b;
+}
+
+.btn-tabla.peligro:hover {
+  background: #c0392b;
+  color: #ffffff;
+}
+
+.btn-tabla.primario {
+  background: var(--penalolen-blue);
+  color: #ffffff;
+}
+
+.btn-tabla.primario:hover {
+  background: var(--penalolen-navy);
+}
+
+.btn-tabla:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+.chip.estado-activo,
+.chip.estado-recibido {
+  background: #e3f2e9;
+  color: #1c7c3a;
+}
+
+.chip.estado-inactivo,
+.chip.estado-cancelado {
+  background: #fdecec;
+  color: #8a1f1f;
+}
+
+.chip.estado-en_preparacion,
+.chip.estado-en_despacho {
+  background: #fff4d6;
+  color: #8a6d00;
+}
+
+.chip.estado-listo_para_retiro,
+.chip.estado-entregado {
+  background: #e3edfb;
+  color: var(--penalolen-blue);
+}
+
+/* ===== Cola de pedidos ===== */
+.filtro-estado {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.92em;
+  font-weight: 600;
+}
+
+.filtro-estado select {
+  padding: 0.5rem;
+  border: 1px solid var(--penalolen-border);
+  border-radius: 0.35rem;
+  font-size: 1em;
+}
+
+.cola-pedidos {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.pedido-card {
+  background: var(--penalolen-surface);
+  border: 1px solid var(--penalolen-border);
+  border-radius: 0.5rem;
+  padding: 1rem 1.1rem;
+}
+
+.pedido-cabecera {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+  font-size: 1.05em;
+}
+
+.pedido-modalidad {
+  background: var(--penalolen-navy);
+  color: #ffffff;
+  font-size: 0.75em;
+  font-weight: 700;
+  padding: 0.2rem 0.6rem;
+  border-radius: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.pedido-fecha {
+  margin-left: auto;
+  color: var(--penalolen-text-muted);
+  font-size: 0.88em;
+}
+
+.pedido-cliente {
+  margin: 0.5rem 0;
+  color: var(--penalolen-text-muted);
+  font-size: 0.95em;
+}
+
+.pedido-items {
+  margin: 0 0 0.75rem;
+  padding-left: 1.2rem;
+  font-size: 0.93em;
+}
+
+.pedido-items li {
+  margin-bottom: 0.15rem;
+}
+
+.pedido-items small {
+  color: var(--penalolen-text-muted);
+}
+
+.pedido-acciones {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  border-top: 1px dashed var(--penalolen-border);
+  padding-top: 0.75rem;
+}
+
+.pedido-total {
+  font-size: 1.1em;
+  margin-right: auto;
+}
+
+.pedido-historial {
+  margin-top: 0.85rem;
+  background: #f4f7fd;
+  border-radius: 0.4rem;
+  padding: 0.8rem 1rem;
+}
+
+.pedido-historial h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.98em;
+}
+
+.pedido-historial ol {
+  margin: 0;
+  padding-left: 1.3rem;
+  font-size: 0.92em;
+}
+
+.pedido-historial li {
+  margin-bottom: 0.3rem;
+}
+
+/* ===== Páginas de seguimiento y cuenta del vecino (HU-03 / HU-07) ===== */
+/* El header usa margen negativo (-1.75rem); este espacio evita solapes. */
+.pagina-contenido {
+  padding-top: 3.25rem;
+}
+
+.seguimiento-resultado {
+  max-width: 760px;
+  margin: 1.5rem auto 0;
+  background: var(--penalolen-surface);
+  border: 1px solid var(--penalolen-border);
+  border-radius: 0.6rem;
+  padding: 1.5rem;
+  box-shadow: 0 6px 24px rgba(34, 41, 87, 0.08);
+}
+
+.seguimiento-datos {
+  margin: 0.75rem 0;
+  color: var(--penalolen-text-muted);
+  font-size: 0.95em;
+}
+
+.seguimiento-historial {
+  background: #f4f7fd;
+  border-radius: 0.4rem;
+  padding: 0.8rem 1rem;
+  margin-bottom: 1rem;
+}
+
+.seguimiento-historial h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.98em;
+}
+
+.seguimiento-historial ol {
+  margin: 0;
+  padding-left: 1.3rem;
+  font-size: 0.92em;
+}
+
+.seguimiento-historial li {
+  margin-bottom: 0.4rem;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.seguimiento-historial time {
+  color: var(--penalolen-text-muted);
+}
+
+.pedido-total-seguimiento {
+  margin: 0;
+  text-align: right;
+  color: var(--penalolen-navy);
+  font-size: 1.05em;
+}
+
+.cuenta-pedidos {
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+/* Datos de la cuenta del vecino junto a sus pedidos (HU-03) */
+.cuenta-datos {
+  background: var(--penalolen-surface);
+  border: 1px solid var(--penalolen-border);
+  border-radius: 0.6rem;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.25rem;
+}
+
+.cuenta-datos h3 {
+  margin: 0 0 0.65rem;
+  font-size: 1em;
+  color: var(--penalolen-navy);
+}
+
+.cuenta-datos dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.75rem;
+}
+
+.cuenta-datos dt {
+  font-size: 0.78em;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--penalolen-text-muted);
+}
+
+.cuenta-datos dd {
+  margin: 0.15rem 0 0;
+  font-weight: 600;
+  color: var(--penalolen-navy);
+  overflow-wrap: anywhere;
+}
+
+/* Estado del pedido desplegado dentro de la tarjeta (HU-03): mismo aspecto
+   que la página de seguimiento, pero sin salir de #/cuenta. */
+.cuenta-estado {
+  margin-top: 0.85rem;
+  padding-top: 0.85rem;
+  border-top: 1px dashed var(--penalolen-border);
+}
+
+.cuenta-estado .seguimiento-historial {
+  margin-bottom: 0;
+}
+
+.cuenta-pedidos .admin-barra-sesion h2 {
+  margin: 0;
+}
+
+.cuenta-pestanas {
+  justify-content: center;
+  max-width: 420px;
+  margin: 0 auto;
+}
+
+/* Enlaces que imitan botones dentro de tarjetas y confirmaciones */
+a.btn-tabla {
+  display: inline-block;
+  text-decoration: none;
+}
+
+a.btn-continuar-checkout {
+  display: block;
+  text-align: center;
+  text-decoration: none;
+  box-sizing: border-box;
+}
+
+.btn-seguimiento-exito {
+  margin-top: 0.6rem;
+  background: var(--penalolen-surface);
+  color: var(--penalolen-blue);
+  border: 1px solid var(--penalolen-blue);
+}
+
+.btn-seguimiento-exito:hover {
+  background: var(--penalolen-blue);
+  color: #ffffff;
+}
+
+/* ===== Receta médica: checkout, cuenta y registro (vecino) ===== */
+.checkout-receta {
+  margin-top: 1rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--penalolen-border);
+}
+
+.checkout-receta h4 {
+  margin: 0 0 0.5rem;
+  font-size: 0.95em;
+  color: var(--penalolen-navy);
+}
+
+fieldset.checkout-receta {
+  border: 1px solid var(--penalolen-border);
+  border-radius: 0.35rem;
+  padding: 0.85rem 1rem;
+}
+
+fieldset.checkout-receta legend {
+  padding: 0 0.35rem;
+  font-weight: 700;
+  color: var(--penalolen-navy);
+}
+
+.checkout-receta-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.checkout-receta-panel {
+  margin-top: 0.75rem;
+  background: #f4f7fd;
+  border-radius: 0.4rem;
+  padding: 0.85rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.checkout-receta-panel input[type='file'] {
+  font-size: 0.88em;
+}
+
+.checkout-receta-panel .login-ayuda {
+  margin: 0;
+}
+
+.alerta-receta-isp.bloqueo {
+  background: #fdecec;
+  border-left-color: #a3242a;
+  color: #7a1c22;
+}
+
+.alerta-receta-isp ul {
+  margin: 0.45rem 0 0;
+  padding-left: 1.1rem;
+}
+
+/* Listado de recetas del vecino */
+.receta-lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.receta-item {
+  background: var(--penalolen-surface);
+  border: 1px solid var(--penalolen-border);
+  border-radius: 0.35rem;
+  padding: 0.75rem 0.9rem;
+  font-size: 0.92em;
+}
+
+.receta-cabecera {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.chip-receta {
+  display: inline-block;
+  font-size: 0.72em;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.2rem 0.6rem;
+  border-radius: 1rem;
+  background: #fff4d6;
+  color: #8a6d00;
+}
+
+.chip-receta.receta-aceptada {
+  background: #e6f4ea;
+  color: #1e6b34;
+}
+
+.chip-receta.receta-rechazada {
+  background: #fdecec;
+  color: #8a1f1f;
+}
+
+.receta-observaciones {
+  margin: 0.45rem 0 0;
+  color: var(--penalolen-text-muted);
+  font-size: 0.92em;
+}
+
+.receta-items {
+  margin: 0.45rem 0 0;
+  padding-left: 1.15rem;
+  font-size: 0.92em;
+}
+
+.receta-subida {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.receta-subida input[type='file'] {
+  font-size: 0.88em;
+}
+
+.cuenta-recetas {
+  background: var(--penalolen-surface);
+  border: 1px solid var(--penalolen-border);
+  border-radius: 0.6rem;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.25rem;
+}
+
+.cuenta-recetas h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1em;
+  color: var(--penalolen-navy);
+}
+
+/* Datos editables de la cuenta (HU-03) */
+.cuenta-datos-campos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 0.75rem;
+}
+
+.cuenta-datos-campos label {
+  display: block;
+  font-size: 0.88em;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+.cuenta-datos-campos input {
+  width: 100%;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--penalolen-border);
+  border-radius: 0.35rem;
+  font-size: 1em;
+}
+
+.cuenta-datos-pie {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-top: 0.9rem;
+  padding-top: 0.75rem;
+  border-top: 1px dashed var(--penalolen-border);
+}
+
+.cuenta-dato-estadistica {
+  font-size: 0.9em;
+  color: var(--penalolen-text-muted);
+}
+
+.cuenta-mensaje {
+  margin: 0.6rem 0 0;
+  font-size: 0.9em;
+  color: #1e6b34;
+}
+
+.cuenta-mensaje.error {
+  color: #8a1f1f;
+}
+
+/* ===== Revisión de recetas en el panel de funcionarios ===== */
+.receta-archivo-enlace {
+  color: var(--penalolen-blue);
+  font-weight: 600;
+}
+
+.receta-revision {
+  margin-top: 0.85rem;
+  padding-top: 0.85rem;
+  border-top: 1px dashed var(--penalolen-border);
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.9rem;
+}
+
+@media (min-width: 960px) {
+  .receta-revision {
+    grid-template-columns: minmax(0, 1.05fr) minmax(300px, 0.95fr);
+  }
+}
+
+.receta-revision-datos {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+/* Vista previa del archivo dentro del panel: evita cambiar de pestaña. */
+.receta-preview {
+  border: 1px solid var(--penalolen-border);
+  border-radius: 0.5rem;
+  background: #f7f9fd;
+  padding: 0.6rem;
+}
+
+.receta-preview-cabecera {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.85em;
+  font-weight: 700;
+  color: var(--penalolen-navy);
+}
+
+.receta-preview-acciones {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  font-weight: 600;
+}
+
+.receta-zoom {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.receta-zoom button {
+  padding: 0.15rem 0.45rem;
+  border: 1px solid var(--penalolen-border);
+  border-radius: 0.3rem;
+  background: #fff;
+  color: var(--penalolen-navy);
+  font-weight: 700;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.receta-zoom button:hover:not(:disabled) {
+  background: #eef2f9;
+}
+
+.receta-zoom button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.receta-zoom span {
+  min-width: 3.2em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.receta-preview-lienzo {
+  overflow: auto;
+  max-height: 540px;
+  border-radius: 0.35rem;
+  background: #fff;
+}
+
+.receta-preview iframe {
+  display: block;
+  width: 100%;
+  height: 520px;
+  border: 0;
+  border-radius: 0.35rem;
+  background: #fff;
+}
+
+.receta-preview img {
+  display: block;
+  max-width: 100%;
+  max-height: 520px;
+  margin: 0 auto;
+  object-fit: contain;
+  border-radius: 0.35rem;
+}
+
+/* Vigencia de la receta aceptada: renovación cada 6 meses. */
+.receta-vigencia {
+  margin: 0.35rem 0 0;
+  padding: 0.35rem 0.55rem;
+  border-radius: 0.3rem;
+  background: #e8f5ee;
+  color: #1f6b43;
+  font-size: 0.88em;
+}
+
+.receta-vigencia.vencida {
+  background: #fbeaea;
+  color: #b02b2c;
+}
+
+.receta-revision h3 {
+  margin: 0;
+  font-size: 0.98em;
+  color: var(--penalolen-navy);
+}
+
+.receta-revision .login-ayuda {
+  margin: 0;
+}
+
+.receta-items-seleccion {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.receta-item-fila {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  background: #f4f7fd;
+  border-radius: 0.35rem;
+  padding: 0.45rem 0.65rem;
+  font-size: 0.92em;
+}
+
+.receta-item-fila > span {
+  flex: 1 1 180px;
+  font-weight: 600;
+}
+
+.receta-item-fila label {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.9em;
+}
+
+.receta-item-fila input[type='number'] {
+  width: 70px;
+  padding: 0.35rem 0.45rem;
+  border: 1px solid var(--penalolen-border);
+  border-radius: 0.25rem;
+}
+
+.receta-agregar {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.receta-agregar label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.88em;
+  font-weight: 600;
+  flex: 1 1 220px;
+}
+
+.receta-agregar select,
+.receta-agregar input[type='number'],
+.receta-revision textarea {
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--penalolen-border);
+  border-radius: 0.35rem;
+  font-size: 1em;
+  font-family: inherit;
+}
+
+.receta-agregar label:nth-of-type(2) {
+  flex: 0 0 110px;
+}
+
+.receta-revision textarea {
+  width: 100%;
+  resize: vertical;
+}
+
+.receta-revision-acciones {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.btn-rechazar {
+  background: var(--penalolen-surface);
+  color: #8a1f1f;
+  border: 1px solid #c98b8b;
+  padding: 0.6rem 1rem;
+  border-radius: 0.35rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.btn-rechazar:hover {
+  background: #fdecec;
+}
+
+.btn-rechazar:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }

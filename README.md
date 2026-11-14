@@ -1,6 +1,57 @@
-# Farmacia Comunitaria
+# Farmacia Comunitaria · Peñalolén
 
-Monorepo con pnpm Workspaces, React + Vite y Fastify. Ambas apps utilizan TypeScript estricto y se instalan con un único lockfile.
+Portal de la Farmacia Comunitaria de la Municipalidad de Peñalolén: los vecinos
+buscan medicamentos por nombre o principio activo, ven precio y disponibilidad,
+armen su carrito y solicitan el pedido para retiro presencial o despacho a
+domicilio; el funcionario gestiona el catálogo y procesa la cola de pedidos.
+
+Monorepo con pnpm Workspaces, React + Vite y Fastify. Ambas apps utilizan
+TypeScript estricto y se instalan con un único lockfile.
+
+## Alcance
+
+Historias de usuario del documento de alcance (prioridad **Must**):
+
+| HU | Historia | Estado |
+| --- | --- | --- |
+| HU-01 | Buscar medicamentos por nombre o principio activo | ✅ |
+| HU-02 | Ver detalle y manipular el carrito | ✅ |
+| HU-03 | Registro e inicio de sesión del vecino | ✅ |
+| HU-04 | Checkout con retiro o despacho, estado inicial | ✅ |
+| HU-05 | Inscripción de medio de pago en Webpay Oneclick | ⏳ postergada |
+| HU-06 | Pago del pedido con Webpay Oneclick | ⏳ postergada |
+| HU-07 | Consulta pública del estado del pedido | ✅ |
+| HU-08 | Modo Simple (interfaz ampliada y guiada) | ✅ |
+| HU-09 | Gestión de catálogo y stock por el funcionario | ✅ |
+| HU-10 | Cola de pedidos y cambio de estado con historial | ✅ |
+| HU-11 | Preparación y despacho de delivery (salida y entrega) | ✅ |
+
+- **HU-05 y HU-06 (Webpay) quedan pendientes** para una integración posterior:
+  hoy el pedido se registra sin pasarela de pago.
+- HU-12 en adelante (importación Excel, asistente virtual, roles/auditoría,
+  identidad institucional, derechos de datos) están fuera de esta entrega;
+  HU-18 y HU-19 son *Won't*.
+
+### Receta médica
+
+- El vecino puede adjuntar su receta al crear la cuenta o desde `#/cuenta`
+  (PDF, JPG o PNG, máximo 4 MB).
+- La receta queda **pendiente** hasta que un funcionario la revisa en la
+  pestaña **Recetas** del panel: la previsualiza en línea (con zoom de 50 % a
+  200 %) y registra los medicamentos que indica, con la cantidad autorizada.
+- Al aceptarla, el vecino solo puede comprar los medicamentos marcados como
+  *Requiere Receta Médica* si están cubiertos hasta la cantidad autorizada.
+  Los de **Venta directa** se compran sin receta aunque no estén indicados.
+- La receta aceptada **vence a los 6 meses** de su revisión. En `#/cuenta` se
+  indica cuántos meses y días de vigencia le quedan o desde cuándo está
+  vencida; una receta vencida deja de autorizar y de etiquetar medicamentos
+  hasta que se suba una nueva.
+- El catálogo etiqueta con **"Indicado en tu receta"** los medicamentos con
+  unidades autorizadas por una receta aceptada y vigente de la cuenta con
+  sesión.
+- La API rechaza con **403** cualquier medicamento marcado como
+  *Requiere Receta Médica* que no esté cubierto, y los invitados no pueden
+  comprarlos sin cuenta.
 
 ## Requisitos y arranque
 
@@ -25,7 +76,80 @@ Las direcciones anteriores son las preferidas. Si otro proyecto ocupa un puerto,
 
 Compose espera a que PostgreSQL esté listo, aplica las migraciones en un servicio independiente y después inicia API y web. Los cambios de código se sincronizan con los contenedores: Vite recarga la interfaz y Node reinicia la API. Los cambios de dependencias reconstruyen las imágenes.
 
-La web muestra el catálogo de referencia y un carrito local. Con el piloto de autenticación configurado, también muestra el acceso por correo. `Ctrl+C` detiene los servicios. `pnpm dev:down` elimina sus contenedores y red y conserva el volumen PostgreSQL.
+`Ctrl+C` detiene los servicios; `pnpm dev:down` elimina sus contenedores y red, conservando el volumen PostgreSQL.
+
+### Arranque nativo (sin Docker)
+
+```sh
+pnpm install --frozen-lockfile
+pnpm db:up        # solo PostgreSQL en Docker
+pnpm --filter api seed   # catálogo de ejemplo y usuarios del panel
+pnpm dev:api      # terminal 1
+pnpm dev:web      # terminal 2
+```
+
+## Rutas de la aplicación
+
+La web usa enrutado por hash:
+
+| Ruta | Contenido |
+| --- | --- |
+| `#/` | Catálogo del vecino: búsqueda, detalle, carrito, Modo Simple y checkout |
+| `#/seguimiento` | Consulta pública de un pedido por número y contacto (HU-07) |
+| `#/cuenta` | Registro e inicio de sesión del vecino, sus datos y sus pedidos (HU-03) |
+| `#/admin` | Panel de funcionarios: catálogo/stock, cola de pedidos y revisión de recetas (HU-09…HU-11) |
+
+El botón de cuenta del encabezado (catálogo y seguimiento) muestra
+**"Iniciar sesión"** mientras no haya sesión del vecino y **"Mi cuenta"** en
+cuando entra; desde `#/cuenta` se ven los datos de la cuenta y los pedidos
+asociados, con opción de cerrar sesión.
+
+### Credenciales del panel (solo desarrollo)
+
+Creadas por el seed:
+
+| Rol | Email | Contraseña |
+| --- | --- | --- |
+| Administrador | `admin@farmacia.local` | `admin123` |
+| Funcionario | `funcionario@farmacia.local` | `funcionario123` |
+
+Se pueden sobreescribir con `SEED_ADMIN_PASSWORD` y `SEED_FUNCIONARIO_PASSWORD`
+antes de ejecutar el seed. No usar estas contraseñas fuera de desarrollo.
+
+## Estados del pedido
+
+```text
+RECIBIDO → EN_PREPARACION → LISTO_PARA_RETIRO → ENTREGADO   (retiro)
+                        ↘ EN_DESPACHO       → ENTREGADO   (delivery)
+```
+
+- `CANCELADO` puede salir desde cualquier estado que no sea final.
+- El retiro nunca pasa por `EN_DESPACHO` ni el delivery por
+  `LISTO_PARA_RETIRO`; la API rechaza transiciones inválidas con **409**.
+- Cada cambio queda en `pedido_historial` con responsable, fecha y hora
+  (HU-10), y el vecino lo ve en el seguimiento (HU-07).
+- La cola del panel se ordena por defecto de **más reciente a más antiguo**
+  (y permite invertir el orden) y se filtra por estado.
+
+## API
+
+| Método y ruta | Descripción |
+| --- | --- |
+| `GET /api/health` | Comprobación de salud pública |
+| `GET /api/medicamentos` | Catálogo público (búsqueda y filtros) |
+| `POST /api/pedidos` | Crea un pedido desde el checkout |
+| `GET /api/pedidos/seguimiento?numero=&contacto=` | Estado e historial públicos (404 si el contacto no coincide) |
+| `POST /api/auth/login` · `logout` · `GET /api/auth/me` | Sesión del funcionario (cookie `farmacia_sesion`) |
+| `GET /api/admin/medicamentos` · `POST` · `PATCH /:id` · `DELETE /:id` · `POST /:id/reactivar` | Gestión de catálogo y stock (HU-09) |
+| `GET /api/admin/pedidos` · `GET /:id` · `PATCH /:id/estado` | Cola, detalle e historial con cambio de estado (HU-10, HU-11) |
+| `POST /api/vecinos/registro` · `login` · `logout` · `GET /me` · `PATCH /me` · `GET /pedidos` | Cuenta del vecino, sus datos y sus pedidos (HU-03) |
+| `POST /api/vecinos/recetas` · `GET /api/vecinos/recetas` | Subida de la receta y su estado de revisión |
+| `GET /api/admin/recetas` · `GET /:id/archivo` · `POST /:id/estado` | Revisión de recetas: archivo, aceptar con medicamentos indicados o rechazar |
+
+La sesión usa cookies `farmacia_sesion` (funcionarios) y `farmacia_vecino`
+(vecinos), con hash sha256 en la base de datos, 7 días de vigencia y
+`SameSite=Lax`. Toda ruta `/api/admin/*` exige sesión y rol; la validación y
+la autorización viven en el backend, no en el navegador.
 
 ## Estructura y responsabilidades
 
@@ -33,23 +157,24 @@ La web muestra el catálogo de referencia y un carrito local. Con el piloto de a
 apps/
   web/
     src/
-      features/      # Catalog, cart and account access
-      components/    # Componentes visuales compartidos
-      api/           # Acceso HTTP y validación de respuestas externas
-      App.tsx        # Interfaz inicial
+      features/      # Catálogo, seguimiento, cuenta, recetas y panel de administración
+      components/    # Componentes visuales compartidos (LogoMuni, etc.)
+      App.tsx        # Enrutado por hash
       main.tsx       # Entrada de React
-    test/
+      styles.css     # Estilos globales del portal
+    test/            # Tests unitarios con el runner de Node
     vite.config.ts
   api/
     src/
-      modules/       # Authentication, inventory and orders
+      modules/       # auth, medicamentos, pedidos, vecinos y recetas (reglas de negocio)
       plugins/       # Integraciones de Fastify
       app.ts         # Construcción y rutas de Fastify, sin abrir puertos
       config.ts      # Lectura y validación de configuración
       server.ts      # Arranque, logging y cierre del servidor
+      seed.ts        # Catálogo de ejemplo y usuarios del panel
     test/
 packages/
-  database/          # PostgreSQL, cliente Drizzle, modelos y migraciones compartidos
+  database/          # Conexión, schema Drizzle y migraciones compartidos
 infra/local/         # Imagen de desarrollo y comando único de arranque
 docs/                # Convenciones de estructura y documentación técnica
 compose.development.yaml # Servicios, dependencias, healthchecks y Compose Watch
@@ -59,11 +184,17 @@ pnpm-workspace.yaml  # Apps y paquetes que pertenecen al workspace
 pnpm-lock.yaml       # Versiones reproducibles para todo el monorepo
 ```
 
-Cada app declara sus dependencias de ejecución. Las herramientas comunes de desarrollo están en la raíz. La web consume la API por HTTP; no importa código interno del backend. `@farmacia/database` centraliza el acceso PostgreSQL para las apps de backend. Los paquetes internos se referencian con `workspace:*`.
+Cada app declara sus dependencias de ejecución. Las herramientas comunes de
+desarrollo están en la raíz. La web consume la API por HTTP; no importa código
+interno del backend. `@farmacia/database` centraliza el acceso PostgreSQL para
+las apps de backend. Los paquetes internos se referencian con `workspace:*`.
 
-Consultar la [guía de estructura y convenciones](docs/estructura.md) antes de agregar funcionalidades, paquetes o modelos. Define las responsabilidades de cada carpeta, los nombres, las dependencias permitidas y la ubicación de los tests. Las carpetas base vacías se conservan con `.gitkeep`; retirar ese archivo cuando tengan contenido real. Los módulos de negocio y paquetes futuros se crean cuando se implementen, siguiendo esa guía.
+Consultar la [guía de estructura y convenciones](docs/estructura.md) antes de
+agregar funcionalidades, paquetes o modelos.
 
-El workspace autoriza únicamente el script de instalación de `esbuild`, necesario para `tsx`. Los scripts de instalación de otras dependencias requieren revisión explícita de pnpm.
+El workspace autoriza únicamente el script de instalación de `esbuild`,
+necesario para `tsx`. Los scripts de instalación de otras dependencias
+requieren revisión explícita de pnpm.
 
 ## Comandos
 
@@ -77,19 +208,40 @@ El workspace autoriza únicamente el script de instalación de `esbuild`, necesa
 | `pnpm lint` | Comprueba ESLint sin advertencias permitidas |
 | `pnpm typecheck` | Comprueba tipos de código, configuración y tests |
 | `pnpm test` | Ejecuta tests de apps y paquetes con el runner de Node |
-| `pnpm test:integration` | Verifica PostgreSQL, inventario, pedidos, reservas y autenticación con `DATABASE_URL` y las migraciones aplicadas |
 | `pnpm build` | Compila apps y paquetes en sus carpetas `dist/` |
 | `pnpm check` | Ejecuta lint, tipos, tests y build |
+| `pnpm --filter api seed` | Carga el catálogo de ejemplo y los usuarios del panel |
 | `pnpm start:api` | Ejecuta la API compilada |
 | `pnpm preview:web` | Sirve el build web para revisión local |
 | `pnpm db:up` | Levanta solo PostgreSQL |
 | `pnpm db:down` | Alias de `dev:down`; detiene el entorno conservando los datos |
 | `pnpm db:generate` | Genera migraciones en Docker y escribe los archivos en el repositorio |
 | `pnpm db:migrate` | Aplica migraciones desde un contenedor independiente |
-| `pnpm db:test` | Ejecuta las pruebas de integración de base de datos y API dentro de Docker |
+| `pnpm db:test` | Verifica la conexión PostgreSQL desde dos pools dentro de Docker |
 | `pnpm test:dev` | Comprueba la preparación del entorno y la selección de puertos |
 
-Para ejecutar las verificaciones de forma nativa, instalar las dependencias con `pnpm install --frozen-lockfile` y luego ejecutar `pnpm check`. Las imágenes Docker también usan el lockfile en modo frozen.
+Para ejecutar las verificaciones de forma nativa, instalar las dependencias con
+`pnpm install --frozen-lockfile` y luego ejecutar `pnpm check`. Las imágenes
+Docker también usan el lockfile en modo frozen.
+
+## Base de datos compartida
+
+La conexión, el esquema y las migraciones están en `packages/database`. El
+esquema define el catálogo (`medicamentos`), los usuarios del panel
+(`usuarios`), los pedidos con su historial (`pedidos`, `pedido_historial`) y la
+cuenta del vecino (`vecinos`, `vecino_sesiones`) y las recetas médicas con los
+medicamentos autorizados (`recetas`, `receta_items`).
+
+`pnpm dev` ya inicia la base de datos y aplica las migraciones. Para trabajar
+únicamente con la base:
+
+```sh
+pnpm db:up
+pnpm db:generate
+pnpm db:migrate
+```
+
+Ver [configuración, consumo desde otras apps y flujo de migraciones](packages/database/README.md).
 
 ## Integración continua
 
@@ -103,8 +255,7 @@ considerar válida una ejecución:
   altas o críticas de dependencias de producción.
 - **Docker integration**: valida Compose, construye las imágenes y levanta
   PostgreSQL 17, migraciones, API y web. Espera sus healthchecks, prueba dos
-  pools PostgreSQL, las operaciones de inventario y pedidos, y los permisos
-  de Better Auth. También comprueba los puertos HTTP y el proxy web hacia la API.
+  pools PostgreSQL y comprueba los puertos HTTP y el proxy web hacia la API.
   Usa el proyecto aislado `farmacia-ci`, credenciales sintéticas y elimina sus
   contenedores y volúmenes al terminar.
 - **Secret scan**: Gitleaks revisa todo el historial Git disponible, con salida
@@ -120,82 +271,6 @@ Al subir el proyecto a GitHub, habilitar Actions y configurar las reglas de
 protección de `main` para exigir **Quality**, **Docker integration** y
 **Secret scan** después de su primera ejecución. El workflow por sí solo no
 bloquea merges. No necesita `.env.local` ni credenciales de producción.
-
-## Base de datos compartida
-
-Connection, schema and migrations live in `packages/database`. The initial
-model stores product, location and historical inventory data. The catalog and
-cart shown in the browser use sample data. They are separate from live stock
-and the pilot order API.
-
-The commercial product schema includes a required name, optional description,
-sale condition, positive integer CLP price and publication flag. It is not yet
-connected to the public catalog. This unreleased schema change targets a fresh
-database and replaces the old prescription boolean without a compatibility
-layer; see the data model before applying migrations to a populated database.
-
-Operational inventory adds explicit product tracking modes, active locations,
-lots, physical balances and immutable movements. The API module supports
-idempotent openings, receipts, adjustments, atomic transfers and availability
-queries. The order service reserves eligible stock, preserves purchase prices,
-and records sales at fulfillment. The pilot API checks the buyer's role and
-order ownership through Better Auth. Prescription review, payment integration,
-automated reservation expiry and the connection from the web cart to checkout
-remain pending.
-
-Read the [project context and source limitations](docs/context/README.md) and
-the [data model and pending decisions](docs/data-model.md) before extending
-these domains. Supplied materials are retained as curated references and a
-catalog extract, excluding personal contacts and screenshots.
-
-`pnpm dev` ya inicia la base de datos y aplica las migraciones. Para trabajar únicamente con la base:
-
-```sh
-pnpm db:up
-pnpm db:generate
-pnpm db:migrate
-```
-
-Apply migrations before running `pnpm db:test`. Database fixtures are rolled
-back. API tests use isolated schemas that are dropped after their inventory,
-order and authentication tests. Use a dedicated test database with permission
-to create schemas.
-
-Ver [configuración, consumo desde otras apps y flujo de migraciones](packages/database/README.md).
-
-## Pilot authentication
-
-Apply migration `0004_authentication.sql` and configure Better Auth and SMTP
-using the settings in `.env.example`. Add the values to `.env.local` for
-`pnpm dev`, or to `apps/api/.env` for the native API. Generate the session
-secret with `openssl rand -hex 32`. Use the origin that serves the web app for
-`BETTER_AUTH_URL`. The Docker launcher derives the loopback origin from the
-selected web port when this setting is omitted. Nonlocal origins require HTTPS.
-
-The catalog's **Iniciar sesión** sends a code to the account's email. After
-the designated administrator signs in and opens their account, run the command
-with the trusted database configuration. In Docker, run it inside the API
-container.
-
-```sh
-pnpm --filter api auth:admin grant admin@example.test
-```
-
-The administrator looks up a verified account using
-`POST /api/admin/users/lookup` with its email. After checking the pharmacy
-register, grant `buyer` using `PUT /api/admin/users/:userId/roles/buyer` and
-revoke it using `DELETE` on the same route. The same routes manage
-`pharmacy_operator`. Use `PATCH /api/admin/users/:userId/status` with
-`{"status":"disabled"}` or `{"status":"active"}` to manage account status.
-These requests use the administrator's session cookie and the web origin.
-The database command also accepts `revoke` for administrator access.
-
-Configure `ORDER_LOCATION_IDS` as comma-separated inventory location UUIDs
-and `ORDER_RESERVATION_SECONDS` to enable pilot order creation. Set
-`ORDER_DELIVERY_FEE_CLP` to the approved fee when applicable. The API exposes
-`GET /api/me` and buyer-scoped routes under `/api/orders`. The pharmacy
-operator uses `/api/fulfillment/orders` for confirmed orders. ClaveÚnica and
-production email delivery require separate setup and verification.
 
 ## Configuración y despliegue
 
@@ -221,8 +296,7 @@ En ejecución nativa, el proceso de la API carga `.env` con Node y Vite carga el
 
 Esta configuración Docker es de desarrollo. En producción, servir `apps/web/dist` mediante un servidor estático y configurar el reverse proxy para que `/api` apunte a la API. El proxy de Vite no forma parte del build ni de `preview:web`. Mantener el mismo origen evita necesitar CORS para esta estructura.
 
-The public health check is available on every API instance. Configured pilot
-instances also expose login and session-protected order and access management
-routes. The API tests exercise these routes using Fastify's `inject`.
+Las rutas de administración validan sesión, rol y entradas en el backend. Los
+tests de la API usan `inject` y no requieren abrir puertos.
 
 Referencias: [pnpm Workspaces](https://pnpm.io/workspaces), [proxy de desarrollo de Vite](https://vite.dev/config/server-options#server-proxy) y [tests de Fastify](https://fastify.dev/docs/latest/Guides/Testing/).

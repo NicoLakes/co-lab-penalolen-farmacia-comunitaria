@@ -1,4 +1,4 @@
-import type { Medicamento } from './medicamentos.mock';
+import type { Medicamento } from './medicamentos.api';
 
 // Posibles resultados del análisis de la receta
 export type EstadoValidacionReceta =

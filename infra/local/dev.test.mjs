@@ -22,7 +22,12 @@ test('el primer arranque genera un secreto persistente y un archivo privado', as
   assert.equal(new URL(env.DATABASE_URL).hostname, 'postgres');
   assert.equal(new URL(env.DATABASE_URL).password, env.POSTGRES_PASSWORD);
   assert.deepEqual(await prepareEnvironment(directory), env);
-  assert.equal((await stat(join(directory, '.env.local'))).mode & 0o777, 0o600);
+  // Windows no expone permisos POSIX: allí el modo solicitado no es observable.
+  if (process.platform !== 'win32') {
+    assert.equal((await stat(join(directory, '.env.local'))).mode & 0o777, 0o600);
+  } else {
+    assert.ok((await stat(join(directory, '.env.local'))).isFile());
+  }
 });
 
 test('conserva las credenciales anteriores para no romper un volumen existente', async (t) => {

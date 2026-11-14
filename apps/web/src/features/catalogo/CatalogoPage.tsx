@@ -1,18 +1,105 @@
-import { useState } from 'react';
-import logoPenalolen from '../../assets/logo-penalolen.png';
-import { AccountPanel } from '../auth/AccountPanel';
-import { MEDICAMENTOS_INICIALES } from './medicamentos.mock';
-import type { Medicamento } from './medicamentos.mock';
+import { useEffect, useState } from 'react';
+import { LogoMuni } from '../../components/LogoMuni';
+import { BotonCuenta } from '../../components/BotonCuenta';
+import { listarMedicamentos } from './medicamentos.api';
+import type { Medicamento } from './medicamentos.api';
 import { CarritoPanel } from './CarritoPanel';
 import type { ItemCarrito } from './CarritoPanel';
+import { recetasDelVecino, vecinoActual } from '../cuenta/cuenta.api';
+import { recetaVigente } from '../cuenta/vigencia';
+
+const CLAVE_CARRITO = 'farmacia_carrito';
+
+// El checkout puede pedir iniciar sesión; guardar el carrito evita perderlo
+// al volver desde la página de la cuenta.
+function carritoGuardado(): ItemCarrito[] {
+  try {
+    const crudo = sessionStorage.getItem(CLAVE_CARRITO);
+    if (!crudo) return [];
+    const datos: unknown = JSON.parse(crudo);
+    if (!Array.isArray(datos)) return [];
+    return datos.filter((item): item is ItemCarrito => {
+      if (typeof item !== 'object' || item === null) return false;
+      const { medicamento, cantidad } = item as Partial<ItemCarrito>;
+      return (
+        typeof cantidad === 'number' &&
+        cantidad > 0 &&
+        typeof medicamento === 'object' &&
+        medicamento !== null &&
+        typeof medicamento.codigo === 'string' &&
+        typeof medicamento.precio === 'number'
+      );
+    });
+  } catch {
+    return [];
+  }
+}
 
 export function CatalogoPage() {
   // 1. Estados: memoria que hace interactiva la página
   const [busqueda, setBusqueda] = useState('');
   const [categoriaActiva, setCategoriaActiva] = useState('TODAS');
   const [modoSimple, setModoSimple] = useState(false);
-  const [carrito, setCarrito] = useState<ItemCarrito[]>([]);
+  const [carrito, setCarrito] = useState<ItemCarrito[]>(carritoGuardado);
   const [carritoAbierto, setCarritoAbierto] = useState(false);
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(CLAVE_CARRITO, JSON.stringify(carrito));
+    } catch {
+      // Si el navegador bloquea el almacenamiento, el carrito sigue en memoria.
+    }
+  }, [carrito]);
+
+  // Catálogo desde la API: carga, error y vacío accesibles para el vecino.
+  const [medicamentos, setMedicamentos] = useState<Medicamento[]>([]);
+  const [estadoCarga, setEstadoCarga] = useState<'cargando' | 'listo' | 'error'>('cargando');
+  const [errorCarga, setErrorCarga] = useState('');
+  const [intento, setIntento] = useState(0);
+
+  useEffect(() => {
+    let vigente = true;
+    listarMedicamentos()
+      .then((lista) => {
+        if (!vigente) return;
+        setMedicamentos(lista);
+        setEstadoCarga('listo');
+      })
+      .catch((error: unknown) => {
+        if (!vigente) return;
+        setErrorCarga(error instanceof Error ? error.message : 'Error desconocido.');
+        setEstadoCarga('error');
+      });
+    return () => {
+      vigente = false;
+    };
+  }, [intento]);
+
+  // Unidades autorizadas por las recetas aceptadas de la cuenta con sesión.
+  const [autorizadosReceta, setAutorizadosReceta] = useState<Map<string, number>>(new Map());
+
+  useEffect(() => {
+    let vigente = true;
+    vecinoActual()
+      .then(() => recetasDelVecino())
+      .then((lista) => {
+        if (!vigente) return;
+        const autorizados = new Map<string, number>();
+        for (const receta of lista) {
+          if (!recetaVigente(receta)) continue;
+          for (const item of receta.items) {
+            autorizados.set(item.codigo, (autorizados.get(item.codigo) ?? 0) + item.cantidad);
+          }
+        }
+        setAutorizadosReceta(autorizados);
+      })
+      .catch(() => {
+        // Sin sesión activa no se etiqueta ningún medicamento.
+      });
+    return () => {
+      vigente = false;
+    };
+  }, []);
 
   function agregarAlCarrito(med: Medicamento) {
     setCarrito((carritoActual) => {
@@ -51,14 +138,14 @@ export function CatalogoPage() {
     0,
   );
 
-  // 2. Categorías terapéuticas para el filtro
+  // 2. Categorías terapéuticas para el filtro (según lo que haya cargado la API)
   const categorias = [
     'TODAS',
-    ...Array.from(new Set(MEDICAMENTOS_INICIALES.map((m) => m.clasificacionTerapeutica))),
+    ...Array.from(new Set(medicamentos.map((m) => m.clasificacionTerapeutica))),
   ];
 
   // 3. Filtramos los medicamentos según lo que escribió el vecino y la categoría elegida
-  const medicamentosFiltrados = MEDICAMENTOS_INICIALES.filter((med: Medicamento) => {
+  const medicamentosFiltrados = medicamentos.filter((med: Medicamento) => {
     const texto = busqueda.toLowerCase();
     const coincideTexto =
       med.principioActivo.toLowerCase().includes(texto) ||
@@ -75,13 +162,7 @@ export function CatalogoPage() {
       {/* Encabezado de la Farmacia */}
       <header className="portal-header">
         <div>
-          <div className="logo-muni-wrap">
-            <img
-              src={logoPenalolen}
-              alt="Municipalidad de Peñalolén"
-              className="logo-muni"
-            />
-          </div>
+          <LogoMuni />
           <h1>Farmacia Comunitaria</h1>
           <p className="subtitulo">
             {modoSimple
@@ -89,6 +170,7 @@ export function CatalogoPage() {
               : 'Consulta disponibilidad, precios solidarios y solicita tus medicamentos en línea.'}
           </p>
         </div>
+        {/* Acciones del encabezado: Modo Simple y acceso al panel */}
         <div className="header-actions">
           <button
             type="button"
@@ -97,7 +179,13 @@ export function CatalogoPage() {
           >
             {modoSimple ? 'Modo Simple Activado (Ver vista estándar)' : 'Activar Modo Simple (Letra Grande)'}
           </button>
-          <AccountPanel />
+          <a className="btn-admin" href="#/seguimiento">
+            Seguir mi pedido
+          </a>
+          <BotonCuenta />
+          <a className="btn-admin" href="#/admin">
+            Panel de funcionarios
+          </a>
         </div>
       </header>
 
@@ -132,8 +220,38 @@ export function CatalogoPage() {
       </section>
 
       {/* Grilla de Medicamentos */}
-      <section className="grilla-medicamentos">
-        {medicamentosFiltrados.map((med) => (
+      <section className="grilla-medicamentos" aria-busy={estadoCarga === 'cargando'}>
+        {estadoCarga === 'cargando' && (
+          <p className="estado-carga" role="status">
+            Cargando el catálogo de medicamentos…
+          </p>
+        )}
+
+        {estadoCarga === 'error' && (
+          <div className="estado-error" role="alert">
+            <p>{errorCarga}</p>
+            <button
+              type="button"
+              className="btn-reintentar"
+              onClick={() => {
+                setEstadoCarga('cargando');
+                setIntento((n) => n + 1);
+              }}
+            >
+              Reintentar
+            </button>
+          </div>
+        )}
+
+        {estadoCarga === 'listo' && medicamentos.length === 0 && (
+          <p className="sin-resultados" role="status">
+            Aún no hay medicamentos disponibles en el catálogo.
+          </p>
+        )}
+
+        {estadoCarga === 'listo' &&
+          medicamentos.length > 0 &&
+          medicamentosFiltrados.map((med) => (
           <article key={med.codigo} className="card-medicamento">
             <div className="card-top">
               <span className="tag-categoria">{med.clasificacionTerapeutica}</span>
@@ -141,6 +259,13 @@ export function CatalogoPage() {
                 {med.requiereReceta ? 'Requiere Receta Médica' : 'Venta directa'}
               </span>
             </div>
+            {autorizadosReceta.has(med.codigo) && (
+              <p className="med-receta-indicada">
+                <span className="tag-receta indicada">Indicado en tu receta</span>{' '}
+                hasta {autorizadosReceta.get(med.codigo)}{' '}
+                {autorizadosReceta.get(med.codigo) === 1 ? 'unidad' : 'unidades'}
+              </p>
+            )}
             <h2 className="med-titulo">{med.principioActivo}</h2>
             <p className="med-descriptor">{med.descriptor}</p>
             {/* En Modo Simple mostramos solo lo esencial; en modo normal el detalle técnico */}
@@ -164,11 +289,13 @@ export function CatalogoPage() {
             </div>
           </article>
         ))}
-        {medicamentosFiltrados.length === 0 && (
-          <p className="sin-resultados">
-            No encontramos medicamentos con "{busqueda}". Intente con otro nombre.
-          </p>
-        )}
+        {estadoCarga === 'listo' &&
+          medicamentos.length > 0 &&
+          medicamentosFiltrados.length === 0 && (
+            <p className="sin-resultados">
+              No encontramos medicamentos con "{busqueda}". Intente con otro nombre.
+            </p>
+          )}
       </section>
 
       {/* Botón circular flotante del carrito en la parte inferior derecha */}
@@ -206,6 +333,7 @@ export function CatalogoPage() {
         abierto={carritoAbierto}
         onCerrar={() => setCarritoAbierto(false)}
         onCambiarCantidad={cambiarCantidad}
+        onPedidoConfirmado={() => setCarrito([])}
       />
     </div>
   );
