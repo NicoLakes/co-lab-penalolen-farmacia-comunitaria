@@ -4,9 +4,8 @@ This document describes the schema currently in code. The intended
 new purchasing system is defined in the [ecommerce data model proposal](ecommerce-data-model-proposal.md),
 which covers orders, payments, operational stock and reservations. The
 commercial catalog, operational stock, order lifecycle and Better Auth pilot
-are implemented. The pilot exposes permission-checked order routes. The web
-cart, payment integration and prescription review still need to be connected
-to checkout.
+are implemented. The web cart uses the pilot's permission-checked order route.
+Payment integration and prescription review are pending.
 
 The initial schema stores the product catalog and traceable historical
 observations. It follows the [supplied project context](context/README.md),
@@ -101,12 +100,11 @@ The enum contains `direct_sale`, `simple_prescription`, `retained_prescription`,
 `retained_prescription_stock_control`, `prescription_cheque` and `not_applicable`.
 See the proposal's [Chilean sale conditions](ecommerce-data-model-proposal.md#chilean-sale-conditions)
 for their meaning and regulatory sources. In particular, publication does not
-authorize online purchase of prescription-cheque products. No checkout exists
-yet, so that restriction remains a requirement for its eventual implementation.
+authorize online purchase of prescription-cheque products. Checkout excludes them.
 
 There is no default price or stock field on `products`. Historical purchasing
 costs and valuation totals cannot be reused as current selling prices. The
-frontend still uses its mock and is not connected to this commercial schema.
+public catalog reads the published products from this commercial schema.
 
 ### inventory_locations
 

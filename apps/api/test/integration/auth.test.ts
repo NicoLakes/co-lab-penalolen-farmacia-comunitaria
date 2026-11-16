@@ -7,6 +7,7 @@ import { buildApp } from '../../src/app.js';
 import { setUserRole } from '../../src/modules/auth/access.js';
 import { registerAccessRoutes } from '../../src/modules/auth/access-routes.js';
 import { createAuth } from '../../src/modules/auth/auth.js';
+import { registerCatalogRoutes } from '../../src/modules/catalog/catalog.routes.js';
 import { recordInventoryMovement } from '../../src/modules/inventory/inventory.service.js';
 import { confirmOrderPayment } from '../../src/modules/orders/order-lifecycle.js';
 import { isolatedDatabase } from './isolated-database.js';
@@ -20,7 +21,11 @@ test('Better Auth sessions enforce role changes and order ownership at the HTTP 
     code: randomUUID(), name: 'Synthetic product', quantityUnit: 'package', inventoryTracking: 'quantity_only',
     isPublished: true, saleCondition: 'direct_sale', priceClp: 2000,
   }).returning();
-  assert.ok(location && product);
+  const [restricted] = await db.insert(products).values({
+    code: randomUUID(), name: 'Synthetic prescription product', quantityUnit: 'package',
+    isPublished: true, saleCondition: 'simple_prescription', priceClp: 2000,
+  }).returning();
+  assert.ok(location && product && restricted);
   const [balance] = await db.insert(inventoryBalances).values({ productId: product.id, locationId: location.id }).returning();
   assert.ok(balance);
   await recordInventoryMovement(db, 'test:stock', {
@@ -28,14 +33,25 @@ test('Better Auth sessions enforce role changes and order ownership at the HTTP 
   });
   const app = buildApp();
   t.after(() => app.close());
+  const orderPolicy = { locationIds: [location.id], reservationSeconds: 300, deliveryFeeClp: 0 };
+  registerCatalogRoutes(app, db, orderPolicy);
   registerAccessRoutes(app, {
     db, origin, auth: createAuth(db, {
       origin, secret: randomBytes(32).toString('hex'),
       sendCode: async (email, code) => { codes.set(email, code); },
     }),
-    orderPolicy: { locationIds: [location.id], reservationSeconds: 300, deliveryFeeClp: 0 },
+    orderPolicy,
   });
 
+  async function readCatalog() {
+    const response = await app.inject({ method: 'GET', url: '/api/catalog' });
+    assert.equal(response.statusCode, 200, response.body);
+    return response.json<{ items: { id: string; stock: number; requiresPrescription: boolean }[]; deliveryFeeClp: number }>();
+  }
+  const catalog = await readCatalog();
+  assert.equal(catalog.deliveryFeeClp, 0);
+  assert.equal(catalog.items.find(({ id }) => id === product.id)?.stock, 3);
+  assert.equal(catalog.items.find(({ id }) => id === restricted.id)?.requiresPrescription, true);
   const requestCode = (email: string, remoteAddress: string) => app.inject({
     method: 'POST', url: '/api/auth/email-otp/send-verification-otp', headers: { origin }, remoteAddress,
     payload: { email, type: 'sign-in' },
@@ -46,6 +62,7 @@ test('Better Auth sessions enforce role changes and order ownership at the HTTP 
   async function signIn(email: string, remoteAddress: string, checkOneTimeCode = false) {
     const sent = await requestCode(email, remoteAddress);
     assert.equal(sent.statusCode, 200, sent.body);
+    assert.deepEqual(sent.json(), { ok: true });
     const code = codes.get(email);
     assert.ok(code);
     if (checkOneTimeCode) {
@@ -104,6 +121,13 @@ test('Better Auth sessions enforce role changes and order ownership at the HTTP 
   }
   assert.equal((await app.inject({ method: 'PUT', url: roleUrl(buyer.id), headers: admin.headers })).statusCode, 204);
 
+  const restrictedOrder = await app.inject({
+    method: 'POST', url: '/api/orders', headers: buyer.headers,
+    payload: { ...payload, items: [{ productId: restricted.id, quantity: 1 }], prescriptionValidated: true },
+  });
+  assert.equal(restrictedOrder.statusCode, 409, restrictedOrder.body);
+  assert.deepEqual(restrictedOrder.json(), { code: 'unavailable_product' });
+
   const created = await app.inject({
     method: 'POST', url: '/api/orders', headers: buyer.headers,
     payload: { ...payload, buyerId: other.id },
@@ -111,6 +135,7 @@ test('Better Auth sessions enforce role changes and order ownership at the HTTP 
   assert.equal(created.statusCode, 200, created.body);
   const view = created.json<{ id: string; totalClp: string }>();
   assert.equal(view.totalClp, '2000');
+  assert.equal((await readCatalog()).items.find(({ id }) => id === product.id)?.stock, 2);
   const [order] = await db.select().from(orders).where(eq(orders.id, view.id));
   assert.equal(order?.buyerId, buyer.id);
   const url = `/api/orders/${view.id}`;

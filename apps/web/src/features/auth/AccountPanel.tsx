@@ -1,9 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 
-interface Account {
+export interface Account {
   email: string;
   roles: string[];
+}
+
+interface AccountPanelProps {
+  onAccountChange?: (account: Account | null) => void;
 }
 
 async function readAccount(signal?: AbortSignal): Promise<Account | 'disabled' | null> {
@@ -26,7 +30,7 @@ function authRequest(path: string, body: object) {
   });
 }
 
-export function AccountPanel() {
+export function AccountPanel({ onAccountChange }: AccountPanelProps = {}) {
   const [account, setAccount] = useState<Account | 'disabled' | null>();
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
@@ -38,13 +42,18 @@ export function AccountPanel() {
 
   useEffect(() => {
     const controller = new AbortController();
-    void readAccount(controller.signal).then(setAccount).catch((failure: unknown) => {
+    void readAccount(controller.signal).then((result) => {
+      if (controller.signal.aborted) return;
+      setAccount(result);
+      onAccountChange?.(result && result !== 'disabled' ? result : null);
+    }).catch((failure: unknown) => {
       if (controller.signal.aborted) return;
       setAccount(null);
+      onAccountChange?.(null);
       setError(failure instanceof Error ? failure.message : 'No pudimos comprobar tu sesión.');
     });
     return () => controller.abort();
-  }, []);
+  }, [onAccountChange]);
 
   useEffect(() => {
     if (codeSent) codeInput.current?.focus();
@@ -68,6 +77,7 @@ export function AccountPanel() {
         const session = await readAccount();
         if (!session || session === 'disabled') throw new Error('No pudimos iniciar sesión. Inténtalo de nuevo.');
         setAccount(session);
+        onAccountChange?.(session);
         setCode('');
         setCodeSent(false);
       } else {
@@ -87,6 +97,7 @@ export function AccountPanel() {
     try {
       if (!(await authRequest('sign-out', {})).ok) throw new Error();
       setAccount(null);
+      onAccountChange?.(null);
       setEmail('');
     } catch {
       setError('No pudimos cerrar tu sesión. Inténtalo de nuevo.');

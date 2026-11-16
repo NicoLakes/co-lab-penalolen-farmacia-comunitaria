@@ -1,20 +1,97 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import logoPenalolen from '../../assets/logo-penalolen.png';
 import { AccountPanel } from '../auth/AccountPanel';
+import type { Account } from '../auth/AccountPanel';
 import { MEDICAMENTOS_INICIALES } from './medicamentos.mock';
 import type { Medicamento } from './medicamentos.mock';
 import { CarritoPanel } from './CarritoPanel';
 import type { ItemCarrito } from './CarritoPanel';
 
+interface CatalogItem {
+  id: string;
+  code: string;
+  description: string;
+  activeIngredient: string;
+  dosageForm: string;
+  presentation: string;
+  supplier: string;
+  therapeuticCategory: string;
+  priceClp: number;
+  stock: number;
+  requiresPrescription: boolean;
+}
+
+function isCatalogItem(value: unknown): value is CatalogItem {
+  if (!value || typeof value !== 'object') return false;
+  const item = value as Record<string, unknown>;
+  return ['id', 'code', 'description', 'activeIngredient', 'dosageForm', 'presentation', 'supplier', 'therapeuticCategory']
+    .every((key) => typeof item[key] === 'string')
+    && typeof item.priceClp === 'number' && Number.isSafeInteger(item.priceClp) && item.priceClp > 0
+    && typeof item.stock === 'number' && Number.isSafeInteger(item.stock) && item.stock >= 0
+    && typeof item.requiresPrescription === 'boolean';
+}
+
 export function CatalogoPage() {
   // 1. Estados: memoria que hace interactiva la página
+  const [medicamentos, setMedicamentos] = useState<Medicamento[]>(MEDICAMENTOS_INICIALES);
+  const [fuenteBaseDatos, setFuenteBaseDatos] = useState(false);
+  const [deliveryFeeClp, setDeliveryFeeClp] = useState<number | null>(null);
+  const [cuentaActiva, setCuentaActiva] = useState<Account | null>(null);
   const [busqueda, setBusqueda] = useState('');
   const [categoriaActiva, setCategoriaActiva] = useState('TODAS');
   const [modoSimple, setModoSimple] = useState(false);
   const [carrito, setCarrito] = useState<ItemCarrito[]>([]);
   const [carritoAbierto, setCarritoAbierto] = useState(false);
 
+  const cargarCatalogo = useCallback((signal?: AbortSignal) => {
+    return fetch('/api/catalog', signal ? { signal } : undefined).then(async (response) => {
+      if (!response.ok) throw new Error('Catalog unavailable');
+      const data: unknown = await response.json();
+      if (!data || typeof data !== 'object' || !('items' in data) || !Array.isArray(data.items)
+        || !data.items.every(isCatalogItem) || !('deliveryFeeClp' in data)) {
+        throw new Error('Invalid catalog response');
+      }
+      const fee = data.deliveryFeeClp;
+      if (fee !== null && (typeof fee !== 'number' || !Number.isSafeInteger(fee) || fee < 0)) {
+        throw new Error('Invalid delivery fee');
+      }
+      if (signal?.aborted) return;
+      const catalogo = data.items.map((item) => ({
+        id: item.id,
+        codigo: item.code,
+        principioActivo: item.activeIngredient,
+        descriptor: item.description,
+        formaFarmaceutica: item.dosageForm,
+        presentacion: item.presentation,
+        proveedor: item.supplier,
+        clasificacionTerapeutica: item.therapeuticCategory,
+        precio: item.priceClp,
+        stock: item.stock,
+        requiereReceta: item.requiresPrescription,
+      }));
+      setMedicamentos(catalogo);
+      const porCodigo = new Map(catalogo.map((medicamento) => [medicamento.codigo, medicamento]));
+      setCarrito((actual) => actual.flatMap(({ medicamento, cantidad }) => {
+        const actualizado = porCodigo.get(medicamento.codigo);
+        return actualizado && actualizado.stock > 0
+          ? [{ medicamento: actualizado, cantidad: Math.min(cantidad, actualizado.stock) }]
+          : [];
+      }));
+      setFuenteBaseDatos(true);
+      setDeliveryFeeClp(fee);
+    }).catch(() => {
+      if (!signal?.aborted) setDeliveryFeeClp(null);
+    });
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void cargarCatalogo(controller.signal);
+    return () => controller.abort();
+  }, [cargarCatalogo]);
+
   function agregarAlCarrito(med: Medicamento) {
+    if (med.stock <= 0) return;
     setCarrito((carritoActual) => {
       const existe = carritoActual.find((item) => item.medicamento.codigo === med.codigo);
       if (existe) {
@@ -54,11 +131,11 @@ export function CatalogoPage() {
   // 2. Categorías terapéuticas para el filtro
   const categorias = [
     'TODAS',
-    ...Array.from(new Set(MEDICAMENTOS_INICIALES.map((m) => m.clasificacionTerapeutica))),
+    ...Array.from(new Set(medicamentos.map((m) => m.clasificacionTerapeutica))),
   ];
 
   // 3. Filtramos los medicamentos según lo que escribió el vecino y la categoría elegida
-  const medicamentosFiltrados = MEDICAMENTOS_INICIALES.filter((med: Medicamento) => {
+  const medicamentosFiltrados = medicamentos.filter((med: Medicamento) => {
     const texto = busqueda.toLowerCase();
     const coincideTexto =
       med.principioActivo.toLowerCase().includes(texto) ||
@@ -87,6 +164,7 @@ export function CatalogoPage() {
             {modoSimple
               ? 'Paso 1: Escriba el nombre de su remedio abajo para buscarlo.'
               : 'Consulta disponibilidad, precios solidarios y solicita tus medicamentos en línea.'}
+            {!fuenteBaseDatos && ' · Catálogo de referencia'}
           </p>
         </div>
         <div className="header-actions">
@@ -97,7 +175,7 @@ export function CatalogoPage() {
           >
             {modoSimple ? 'Modo Simple Activado (Ver vista estándar)' : 'Activar Modo Simple (Letra Grande)'}
           </button>
-          <AccountPanel />
+          <AccountPanel onAccountChange={setCuentaActiva} />
         </div>
       </header>
 
@@ -157,9 +235,10 @@ export function CatalogoPage() {
               <button
                 type="button"
                 className="btn-agregar"
+                disabled={med.stock <= 0}
                 onClick={() => agregarAlCarrito(med)}
               >
-                + Agregar al carrito
+                {med.stock > 0 ? '+ Agregar al carrito' : 'Sin stock'}
               </button>
             </div>
           </article>
@@ -202,10 +281,17 @@ export function CatalogoPage() {
       </button>
 
       <CarritoPanel
+        key={cuentaActiva?.email}
         carrito={carrito}
         abierto={carritoAbierto}
+        usuarioEmail={cuentaActiva?.email}
+        deliveryFeeClp={deliveryFeeClp}
         onCerrar={() => setCarritoAbierto(false)}
         onCambiarCantidad={cambiarCantidad}
+        onPedidoCreado={() => {
+          setCarrito([]);
+          void cargarCatalogo();
+        }}
       />
     </div>
   );

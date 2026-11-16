@@ -1,5 +1,6 @@
 // 1. Este "interface" es el molde: obliga a que todo medicamento tenga estos campos
 export interface Medicamento {
+  id?: string;
   codigo: string;                   // Columna Excel: CODIGO
   principioActivo: string;          // Columna Excel: Principio Activo
   descriptor: string;               // Columna Excel: Descriptor 1016

@@ -25,7 +25,7 @@ Las direcciones anteriores son las preferidas. Si otro proyecto ocupa un puerto,
 
 Compose espera a que PostgreSQL esté listo, aplica las migraciones en un servicio independiente y después inicia API y web. Los cambios de código se sincronizan con los contenedores: Vite recarga la interfaz y Node reinicia la API. Los cambios de dependencias reconstruyen las imágenes.
 
-La web muestra el catálogo de referencia y un carrito local. Con el piloto de autenticación configurado, también muestra el acceso por correo. `Ctrl+C` detiene los servicios. `pnpm dev:down` elimina sus contenedores y red y conserva el volumen PostgreSQL.
+La web muestra el catálogo publicado en PostgreSQL y un carrito local. Si la API de catálogo no está disponible al cargar la página, muestra un catálogo de referencia con el checkout deshabilitado. Con el piloto de autenticación y la política de pedidos configurados, las cuentas habilitadas pueden solicitar productos de venta directa. `Ctrl+C` detiene los servicios. `pnpm dev:down` elimina sus contenedores y red y conserva el volumen PostgreSQL.
 
 ## Estructura y responsabilidades
 
@@ -124,24 +124,22 @@ bloquea merges. No necesita `.env.local` ni credenciales de producción.
 ## Base de datos compartida
 
 Connection, schema and migrations live in `packages/database`. The initial
-model stores product, location and historical inventory data. The catalog and
-cart shown in the browser use sample data. They are separate from live stock
-and the pilot order API.
+model stores product, location and historical inventory data. The public catalog
+queries published products and their available stock through `GET /api/catalog`.
 
 The commercial product schema includes a required name, optional description,
-sale condition, positive integer CLP price and publication flag. It is not yet
-connected to the public catalog. This unreleased schema change targets a fresh
-database and replaces the old prescription boolean without a compatibility
-layer; see the data model before applying migrations to a populated database.
+sale condition, positive integer CLP price and publication flag. This unreleased
+schema change targets a fresh database and replaces the old prescription boolean
+without a compatibility layer; see the data model before applying migrations to
+a populated database.
 
 Operational inventory adds explicit product tracking modes, active locations,
 lots, physical balances and immutable movements. The API module supports
 idempotent openings, receipts, adjustments, atomic transfers and availability
 queries. The order service reserves eligible stock, preserves purchase prices,
 and records sales at fulfillment. The pilot API checks the buyer's role and
-order ownership through Better Auth. Prescription review, payment integration,
-automated reservation expiry and the connection from the web cart to checkout
-remain pending.
+order ownership through Better Auth. Prescription review, payment integration
+and automated reservation expiry remain pending.
 
 Read the [project context and source limitations](docs/context/README.md) and
 the [data model and pending decisions](docs/data-model.md) before extending
@@ -224,5 +222,8 @@ Esta configuración Docker es de desarrollo. En producción, servir `apps/web/di
 The public health check is available on every API instance. Configured pilot
 instances also expose login and session-protected order and access management
 routes. The API tests exercise these routes using Fastify's `inject`.
+
+See the [catalog and checkout integration](docs/resumen-integracion.md) for
+the public catalog, delivery pricing and checkout requirements.
 
 Referencias: [pnpm Workspaces](https://pnpm.io/workspaces), [proxy de desarrollo de Vite](https://vite.dev/config/server-options#server-proxy) y [tests de Fastify](https://fastify.dev/docs/latest/Guides/Testing/).
