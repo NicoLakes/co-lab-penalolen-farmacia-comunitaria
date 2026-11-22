@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import logoPenalolen from '../../assets/logo-penalolen.png';
 import { AccountPanel } from '../auth/AccountPanel';
 import type { Account } from '../auth/AccountPanel';
+import { AdminSection } from '../admin/AdminSection';
+import { ManagementSection } from '../management/ManagementSection';
 import { OrdersSection } from '../orders/OrdersSection';
 import { MEDICAMENTOS_INICIALES } from './medicamentos.mock';
 import type { Medicamento } from './medicamentos.mock';
@@ -41,7 +43,7 @@ export function CatalogoPage() {
   const [busqueda, setBusqueda] = useState('');
   const [categoriaActiva, setCategoriaActiva] = useState('TODAS');
   const [modoSimple, setModoSimple] = useState(false);
-  const [vistaActiva, setVistaActiva] = useState<'catalogo' | 'pedidos'>('catalogo');
+  const [vistaActiva, setVistaActiva] = useState<'catalogo' | 'pedidos' | 'admin' | 'gestion'>('catalogo');
   const [carrito, setCarrito] = useState<ItemCarrito[]>([]);
   const [carritoAbierto, setCarritoAbierto] = useState(false);
   const [menuCuentaAbierto, setMenuCuentaAbierto] = useState(false);
@@ -154,6 +156,10 @@ export function CatalogoPage() {
     return coincideTexto && coincideCategoria;
   });
 
+  const puedeVerAdmin = Boolean(cuentaActiva?.roles.includes('user_admin'));
+  const puedeVerGestion = Boolean(cuentaActiva?.roles.includes('pharmacy_operator'));
+  const mostrandoGestion = vistaActiva === 'gestion' && puedeVerGestion;
+  const mostrandoAdmin = vistaActiva === 'admin' && puedeVerAdmin;
   const mostrandoPedidos = vistaActiva === 'pedidos' && Boolean(cuentaActiva);
 
   // 4. Return que construye la página del cliente con las funciones creadas anteriormente
@@ -171,12 +177,16 @@ export function CatalogoPage() {
           </div>
           <h1>Farmacia Comunitaria</h1>
           <p className="subtitulo">
-            {mostrandoPedidos
+            {mostrandoAdmin
+              ? 'Administración de cuentas y roles de la Farmacia Comunitaria.'
+              : mostrandoGestion
+                ? 'Gestión de stock y operación de funcionarios.'
+                : mostrandoPedidos
               ? 'Seguimiento y estado de tus solicitudes de medicamentos.'
               : modoSimple
                 ? 'Paso 1: Escriba el nombre de su remedio abajo para buscarlo.'
                 : 'Consulta disponibilidad, precios solidarios y solicita tus medicamentos en línea.'}
-            {!mostrandoPedidos && !fuenteBaseDatos && ' · Catálogo de referencia'}
+            {!mostrandoAdmin && !mostrandoGestion && !mostrandoPedidos && !fuenteBaseDatos && ' · Catálogo de referencia'}
           </p>
         </div>
         <div className="header-actions">
@@ -187,7 +197,7 @@ export function CatalogoPage() {
           >
             {modoSimple ? 'Modo Simple Activado (Ver vista estándar)' : 'Activar Modo Simple (Letra Grande)'}
           </button>
-          {modoSimple && cuentaActiva && (
+          {modoSimple && cuentaActiva?.roles.includes('buyer') && (
             <button
               type="button"
               className={mostrandoPedidos ? 'btn-modo-simple activo' : 'btn-modo-simple'}
@@ -201,11 +211,24 @@ export function CatalogoPage() {
             open={menuCuentaAbierto}
             onOpenChange={setMenuCuentaAbierto}
             onOpenOrders={() => setVistaActiva('pedidos')}
+            onOpenAdmin={puedeVerAdmin ? () => setVistaActiva('admin') : undefined}
+            onOpenManagement={puedeVerGestion ? () => setVistaActiva('gestion') : undefined}
           />
         </div>
       </header>
 
-      {mostrandoPedidos ? (
+      {mostrandoAdmin && cuentaActiva ? (
+        <AdminSection
+          account={cuentaActiva}
+          onBackToCatalog={() => setVistaActiva('catalogo')}
+        />
+      ) : mostrandoGestion && cuentaActiva ? (
+        <ManagementSection
+          account={cuentaActiva}
+          onBackToCatalog={() => setVistaActiva('catalogo')}
+          onCatalogChanged={() => void cargarCatalogo()}
+        />
+      ) : mostrandoPedidos ? (
         <OrdersSection
           modoSimple={modoSimple}
           onBackToCatalog={() => setVistaActiva('catalogo')}

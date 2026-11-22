@@ -11,6 +11,8 @@ interface AccountPanelProps {
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   onOpenOrders?: () => void;
+  onOpenAdmin?: (() => void) | undefined;
+  onOpenManagement?: (() => void) | undefined;
 }
 
 async function readAccount(signal?: AbortSignal): Promise<Account | 'disabled' | null> {
@@ -38,6 +40,8 @@ export function AccountPanel({
   open: controlledOpen,
   onOpenChange,
   onOpenOrders,
+  onOpenAdmin,
+  onOpenManagement,
 }: AccountPanelProps = {}) {
   const [account, setAccount] = useState<Account | 'disabled' | null>();
   const [internalOpen, setInternalOpen] = useState(false);
@@ -108,6 +112,8 @@ export function AccountPanel({
         : await authRequest('email-otp/send-verification-otp', { email, type: 'sign-in' });
       if (response.status === 429) {
         setError('Hay demasiados intentos. Espera un momento y vuelve a intentarlo.');
+      } else if (codeSent && response.status === 403) {
+        setError('Tu cuenta está deshabilitada. Contacta a la farmacia.');
       } else if (!response.ok) {
         setError(codeSent
           ? 'No pudimos iniciar sesión. Revisa el código o solicita uno nuevo.'
@@ -173,10 +179,36 @@ export function AccountPanel({
               <p className="account-email-label">Sesión iniciada como</p>
               <p className="account-email">{account.email}</p>
               <div className="account-menu-actions">
-                {onOpenOrders && (
+                {onOpenAdmin && (
                   <button
                     type="button"
                     className="btn-agregar btn-account-full"
+                    disabled={busy}
+                    onClick={() => {
+                      setOpen(false);
+                      onOpenAdmin();
+                    }}
+                  >
+                    Panel de administración
+                  </button>
+                )}
+                {onOpenManagement && (
+                  <button
+                    type="button"
+                    className={onOpenAdmin ? 'btn-secundario btn-account-full' : 'btn-agregar btn-account-full'}
+                    disabled={busy}
+                    onClick={() => {
+                      setOpen(false);
+                      onOpenManagement();
+                    }}
+                  >
+                    Panel de gestión
+                  </button>
+                )}
+                {onOpenOrders && account.roles.includes('buyer') && (
+                  <button
+                    type="button"
+                    className={onOpenAdmin || onOpenManagement ? 'btn-secundario btn-account-full' : 'btn-agregar btn-account-full'}
                     disabled={busy}
                     onClick={() => {
                       setOpen(false);

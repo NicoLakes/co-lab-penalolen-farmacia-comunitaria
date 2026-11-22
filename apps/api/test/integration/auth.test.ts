@@ -109,12 +109,36 @@ test('Better Auth sessions enforce role changes and order ownership at the HTTP 
   assert.equal((await app.inject({ method: 'POST', url: '/api/orders', headers: buyer.headers, payload })).statusCode, 403);
   const roleUrl = (id: string, role = 'buyer') => `/api/admin/users/${id}/roles/${role}`;
   assert.equal((await app.inject({ method: 'PUT', url: roleUrl(other.id), headers: buyer.headers })).statusCode, 403);
-  assert.equal((await app.inject({ method: 'PUT', url: roleUrl(buyer.id, 'user_admin'), headers: admin.headers })).statusCode, 400);
+  assert.equal((await app.inject({ method: 'PUT', url: roleUrl(admin.id, 'user_admin'), headers: admin.headers })).statusCode, 403);
+  assert.equal((await app.inject({ method: 'DELETE', url: roleUrl(admin.id, 'user_admin'), headers: admin.headers })).statusCode, 403);
+  const provisioned = await app.inject({
+    method: 'POST', url: '/api/admin/users', headers: admin.headers,
+    payload: { email: 'provisioned@example.test', roles: ['buyer'] },
+  });
+  assert.equal(provisioned.statusCode, 201, provisioned.body);
+  const provisionedId = provisioned.json<{ id: string; roles: string[] }>().id;
+  assert.deepEqual(provisioned.json<{ roles: string[] }>().roles, ['buyer']);
+  assert.equal((await app.inject({ method: 'PUT', url: roleUrl(provisionedId, 'user_admin'), headers: admin.headers })).statusCode, 204);
+  assert.equal((await app.inject({ method: 'DELETE', url: roleUrl(provisionedId, 'user_admin'), headers: admin.headers })).statusCode, 403);
+  assert.equal((await app.inject({
+    method: 'POST', url: '/api/admin/users', headers: admin.headers,
+    payload: { email: 'provisioned@example.test', roles: ['buyer'] },
+  })).statusCode, 409);
+  assert.equal((await app.inject({
+    method: 'POST', url: '/api/admin/users', headers: buyer.headers,
+    payload: { email: 'blocked-create@example.test', roles: ['buyer'] },
+  })).statusCode, 403);
   const lookup = await app.inject({
     method: 'POST', url: '/api/admin/users/lookup', headers: admin.headers, payload: { email: 'buyer@example.test' },
   });
   assert.equal(lookup.statusCode, 200);
   assert.equal(lookup.json<{ id: string }>().id, buyer.id);
+  const listed = await app.inject({ method: 'GET', url: '/api/admin/users?q=buyer@example', headers: admin.headers });
+  assert.equal(listed.statusCode, 200, listed.body);
+  assert.equal(listed.json<{ id: string; email: string }[]>().length, 1);
+  assert.equal(listed.json<{ id: string; email: string }[]>()[0]?.id, buyer.id);
+  assert.equal((await app.inject({ method: 'GET', url: '/api/admin/users', headers: buyer.headers })).statusCode, 403);
+  assert.equal((await app.inject({ method: 'GET', url: '/api/admin/users', headers: operator.headers })).statusCode, 403);
   for (const [id, role] of [[buyer.id, 'buyer'], [other.id, 'buyer'], [operator.id, 'pharmacy_operator']] as const) {
     const grant = await app.inject({ method: 'PUT', url: roleUrl(id, role), headers: admin.headers });
     assert.equal(grant.statusCode, 204, grant.body);
@@ -175,6 +199,7 @@ test('Better Auth sessions enforce role changes and order ownership at the HTTP 
   assert.ok(code);
   const blockedLogin = await verifyCode('other@example.test', code, '192.0.2.3');
   assert.equal(blockedLogin.statusCode, 403);
+  assert.deepEqual(blockedLogin.json(), { code: 'account_disabled' });
   assert.equal(blockedLogin.headers['set-cookie'], undefined);
 
   const signedOut = await app.inject({ method: 'POST', url: '/api/auth/sign-out', headers: buyer.headers, payload: {} });
