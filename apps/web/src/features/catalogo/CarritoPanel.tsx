@@ -20,6 +20,8 @@ interface CarritoPanelProps {
   onCerrar: () => void;
   onCambiarCantidad: (codigo: string, nuevaCantidad: number) => void;
   onPedidoCreado?: () => void;
+  onSolicitarInicioSesion?: () => void;
+  onVerMisPedidos?: () => void;
 }
 
 export function CarritoPanel({
@@ -30,6 +32,8 @@ export function CarritoPanel({
   onCerrar,
   onCambiarCantidad,
   onPedidoCreado,
+  onSolicitarInicioSesion,
+  onVerMisPedidos,
 }: CarritoPanelProps) {
   const [metodoEntrega, setMetodoEntrega] = useState<'pickup' | 'delivery'>('pickup');
   const [nombreReceptor, setNombreReceptor] = useState('');
@@ -38,6 +42,8 @@ export function CarritoPanel({
   const [comuna, setComuna] = useState('Peñalolén');
   const [enviando, setEnviando] = useState(false);
   const [errorPedido, setErrorPedido] = useState('');
+  const [requiereInicioSesion, setRequiereInicioSesion] = useState(false);
+  const alertaRef = useRef<HTMLDivElement>(null);
   const [pedidoExitoso, setPedidoExitoso] = useState<ResumenPedidoCreado | null>(null);
   const lastSubmission = useRef<{ account: string; request: string; key: string } | null>(null);
 
@@ -53,10 +59,12 @@ export function CarritoPanel({
   async function confirmarSolicitud() {
     if (enviando || carritoRequiereReceta || !catalogoDisponible) return;
     setErrorPedido('');
+    setRequiereInicioSesion(false);
     setPedidoExitoso(null);
 
     if (!usuarioEmail) {
-      setErrorPedido('Para confirmar tu solicitud y reservar stock, primero inicia sesión en el botón "Iniciar sesión" arriba a la derecha.');
+      setRequiereInicioSesion(true);
+      requestAnimationFrame(() => alertaRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }));
       return;
     }
 
@@ -93,7 +101,8 @@ export function CarritoPanel({
 
       const datos: unknown = await respuesta.json().catch(() => null);
       if (respuesta.status === 401) {
-        setErrorPedido('Tu sesión expiró o no has iniciado sesión. Usa el botón "Iniciar sesión" arriba a la derecha.');
+        setRequiereInicioSesion(true);
+        requestAnimationFrame(() => alertaRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }));
         return;
       }
       if (respuesta.status === 403) {
@@ -153,6 +162,15 @@ export function CarritoPanel({
             <p>
               Stock reservado para {pedidoExitoso.fulfillmentMethod === 'pickup' ? 'retiro en farmacia' : 'despacho a domicilio'}.
             </p>
+            {onVerMisPedidos && (
+              <button
+                type="button"
+                className="btn-ver-pedidos-exito"
+                onClick={onVerMisPedidos}
+              >
+                Ver en Mis pedidos
+              </button>
+            )}
           </div>
         )}
 
@@ -268,12 +286,30 @@ export function CarritoPanel({
             )}
 
             {errorPedido && (
-              <p className="account-access-error" role="alert">
+              <div className="carrito-alerta-error" role="alert">
                 {errorPedido}
-              </p>
+              </div>
             )}
 
             <div className="carrito-resumen">
+              {requiereInicioSesion && (
+                <div ref={alertaRef} className="carrito-alerta-auth" role="alert">
+                  <strong>Inicia sesión antes de confirmar tu solicitud</strong>
+                  <p>Necesitas autenticarte con tu correo para reservar stock y registrar el pedido.</p>
+                  {onSolicitarInicioSesion && (
+                    <button
+                      type="button"
+                      className="btn-ir-login"
+                      onClick={() => {
+                        setRequiereInicioSesion(false);
+                        onSolicitarInicioSesion();
+                      }}
+                    >
+                      Iniciar sesión ahora
+                    </button>
+                  )}
+                </div>
+              )}
               <div className="carrito-total-fila">
                 <span>Total estimado:</span>
                 <strong>${totalPrecio.toLocaleString('es-CL')}</strong>

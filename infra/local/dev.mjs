@@ -7,7 +7,13 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseEnv } from 'node:util';
 
 export const root = fileURLToPath(new URL('../../', import.meta.url));
-const services = { WEB_PORT: ['web', 5173], API_PORT: ['api', 3001], POSTGRES_PORT: ['postgres', 5432] };
+const services = {
+  WEB_PORT: ['web', 5173],
+  API_PORT: ['api', 3001],
+  POSTGRES_PORT: ['postgres', 5432],
+  MAILPIT_PORT: ['mailpit', 8025],
+  MAILPIT_SMTP_PORT: ['mailpit', 1025],
+};
 
 async function readEnvironment(path) {
   try {
@@ -132,7 +138,7 @@ export async function main(mode = 'dev') {
   }
   let args;
   if (mode === 'dev') {
-    console.log(`\nFarmacia Comunitaria\n\n  Web: http://127.0.0.1:${env.WEB_PORT}\n  API: http://127.0.0.1:${env.API_PORT}/api/health\n  PostgreSQL: 127.0.0.1:${env.POSTGRES_PORT}\n`);
+    console.log(`\nFarmacia Comunitaria\n\n  Web: http://127.0.0.1:${env.WEB_PORT}\n  API: http://127.0.0.1:${env.API_PORT}/api/health\n  PostgreSQL: 127.0.0.1:${env.POSTGRES_PORT}\n  Mailpit: http://127.0.0.1:${env.MAILPIT_PORT}\n`);
     args = ['up', '--build', '--watch', '--menu=false'];
   } else if (mode === 'database') args = ['up', '-d', '--wait', 'postgres'];
   else if (mode === 'down') args = ['down'];

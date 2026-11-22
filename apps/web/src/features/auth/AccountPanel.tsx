@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 
 export interface Account {
@@ -8,6 +8,9 @@ export interface Account {
 
 interface AccountPanelProps {
   onAccountChange?: (account: Account | null) => void;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  onOpenOrders?: () => void;
 }
 
 async function readAccount(signal?: AbortSignal): Promise<Account | 'disabled' | null> {
@@ -30,15 +33,28 @@ function authRequest(path: string, body: object) {
   });
 }
 
-export function AccountPanel({ onAccountChange }: AccountPanelProps = {}) {
+export function AccountPanel({
+  onAccountChange,
+  open: controlledOpen,
+  onOpenChange,
+  onOpenOrders,
+}: AccountPanelProps = {}) {
   const [account, setAccount] = useState<Account | 'disabled' | null>();
+  const [internalOpen, setInternalOpen] = useState(false);
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
   const [codeSent, setCodeSent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const containerRef = useRef<HTMLDivElement>(null);
   const codeInput = useRef<HTMLInputElement>(null);
   const emailInput = useRef<HTMLInputElement>(null);
+
+  const isOpen = controlledOpen ?? internalOpen;
+  const setOpen = useCallback((next: boolean) => {
+    if (controlledOpen === undefined) setInternalOpen(next);
+    onOpenChange?.(next);
+  }, [controlledOpen, onOpenChange]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -56,8 +72,31 @@ export function AccountPanel({ onAccountChange }: AccountPanelProps = {}) {
   }, [onAccountChange]);
 
   useEffect(() => {
-    if (codeSent) codeInput.current?.focus();
-  }, [codeSent]);
+    if (!isOpen) return;
+    containerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    const frame = requestAnimationFrame(() => {
+      (codeInput.current ?? emailInput.current)?.focus();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [isOpen, codeSent]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    function handlePointerDown(event: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') setOpen(false);
+    }
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, setOpen]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -80,6 +119,7 @@ export function AccountPanel({ onAccountChange }: AccountPanelProps = {}) {
         onAccountChange?.(session);
         setCode('');
         setCodeSent(false);
+        setOpen(false);
       } else {
         setCodeSent(true);
       }
@@ -99,6 +139,7 @@ export function AccountPanel({ onAccountChange }: AccountPanelProps = {}) {
       setAccount(null);
       onAccountChange?.(null);
       setEmail('');
+      setOpen(false);
     } catch {
       setError('No pudimos cerrar tu sesión. Inténtalo de nuevo.');
     } finally {
@@ -107,55 +148,90 @@ export function AccountPanel({ onAccountChange }: AccountPanelProps = {}) {
   }
 
   if (account === undefined || account === 'disabled') return null;
+
   return (
-    <details className="account-access">
-      <summary className="btn-modo-simple">{account ? 'Mi cuenta' : 'Iniciar sesión'}</summary>
-      <div className="account-access-panel" aria-busy={busy}>
-        {account ? (
-          <>
-            <p className="account-email">{account.email}</p>
-            <p>{account.roles.includes('buyer')
-              ? 'Tu cuenta está habilitada para comprar.'
-              : 'La farmacia debe habilitar tu cuenta para comprar.'}</p>
-            <button type="button" className="btn-agregar" disabled={busy} onClick={() => void signOut()}>
-              {busy ? 'Cerrando sesión…' : 'Cerrar sesión'}
-            </button>
-          </>
-        ) : (
-          <form onSubmit={(event) => void submit(event)}>
-            {codeSent ? (
-              <>
-                <p role="status">Enviamos un código a <strong>{email}</strong>. Vence en 5 minutos.</p>
-                <label htmlFor="account-code">Código de acceso</label>
-                <input id="account-code" ref={codeInput} className="input-busqueda" type="text"
-                  autoComplete="one-time-code" inputMode="numeric" pattern="[0-9]{6}" maxLength={6}
-                  required disabled={busy} value={code} onChange={(event) => setCode(event.target.value)} />
-              </>
-            ) : (
-              <>
-                <label htmlFor="account-email">Correo electrónico</label>
-                <input id="account-email" ref={emailInput} className="input-busqueda" type="email"
-                  autoComplete="email" maxLength={254} required disabled={busy} value={email}
-                  onChange={(event) => setEmail(event.target.value)} />
-              </>
-            )}
-            <div className="account-access-actions">
-              <button type="submit" className="btn-agregar" disabled={busy}>
-                {codeSent ? (busy ? 'Verificando…' : 'Ingresar') : (busy ? 'Enviando…' : 'Enviar código')}
-              </button>
-              {codeSent && (
-                <button type="button" className="account-access-secondary" disabled={busy} onClick={() => {
-                  setCodeSent(false);
-                  setCode('');
-                  setError('');
-                  requestAnimationFrame(() => emailInput.current?.focus());
-                }}>Volver al correo</button>
-              )}
+    <div ref={containerRef} className="account-access">
+      <button
+        type="button"
+        className={isOpen ? 'btn-modo-simple activo' : 'btn-modo-simple'}
+        aria-expanded={isOpen}
+        aria-haspopup="dialog"
+        onClick={() => setOpen(!isOpen)}
+      >
+        {account ? 'Mi cuenta' : 'Iniciar sesión'}
+      </button>
+
+      {isOpen && (
+        <div
+          className="account-access-panel"
+          role="dialog"
+          aria-label={account ? 'Menú de mi cuenta' : 'Iniciar sesión'}
+          aria-busy={busy}
+        >
+          {account ? (
+            <div className="account-menu-body">
+              <p className="account-email-label">Sesión iniciada como</p>
+              <p className="account-email">{account.email}</p>
+              <div className="account-menu-actions">
+                {onOpenOrders && (
+                  <button
+                    type="button"
+                    className="btn-agregar btn-account-full"
+                    disabled={busy}
+                    onClick={() => {
+                      setOpen(false);
+                      onOpenOrders();
+                    }}
+                  >
+                    Mis pedidos
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="btn-secundario btn-account-full"
+                  disabled={busy}
+                  onClick={() => void signOut()}
+                >
+                  {busy ? 'Cerrando sesión…' : 'Cerrar sesión'}
+                </button>
+              </div>
             </div>
-          </form>
-        )}
-        {error && <p className="account-access-error" role="alert">{error}</p>}
-      </div>
-    </details>
+          ) : (
+            <form onSubmit={(event) => void submit(event)}>
+              {codeSent ? (
+                <>
+                  <p role="status">Enviamos un código a <strong>{email}</strong>. Vence en 5 minutos.</p>
+                  <label htmlFor="account-code">Código de acceso</label>
+                  <input id="account-code" ref={codeInput} className="input-busqueda" type="text"
+                    autoComplete="one-time-code" inputMode="numeric" pattern="[0-9]{6}" maxLength={6}
+                    required disabled={busy} value={code} onChange={(event) => setCode(event.target.value)} />
+                </>
+              ) : (
+                <>
+                  <label htmlFor="account-email">Correo electrónico</label>
+                  <input id="account-email" ref={emailInput} className="input-busqueda" type="email"
+                    autoComplete="email" maxLength={254} required disabled={busy} value={email}
+                    onChange={(event) => setEmail(event.target.value)} />
+                </>
+              )}
+              <div className="account-access-actions">
+                <button type="submit" className="btn-agregar" disabled={busy}>
+                  {codeSent ? (busy ? 'Verificando…' : 'Ingresar') : (busy ? 'Enviando…' : 'Enviar código')}
+                </button>
+                {codeSent && (
+                  <button type="button" className="account-access-secondary" disabled={busy} onClick={() => {
+                    setCodeSent(false);
+                    setCode('');
+                    setError('');
+                    requestAnimationFrame(() => emailInput.current?.focus());
+                  }}>Volver al correo</button>
+                )}
+              </div>
+            </form>
+          )}
+          {error && <p className="account-access-error" role="alert">{error}</p>}
+        </div>
+      )}
+    </div>
   );
 }

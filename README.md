@@ -16,6 +16,7 @@ pnpm dev
 
 - Web: http://127.0.0.1:5173
 - API: http://127.0.0.1:3001/api/health
+- Mailpit (bandeja local de correos OTP): http://127.0.0.1:8025
 
 Un solo comando construye las imágenes, instala las dependencias dentro de Docker y levanta PostgreSQL, las migraciones, la API y la web. No hace falta ejecutar `pnpm install` en el computador para arrancar el entorno Docker.
 
@@ -201,7 +202,7 @@ El entorno Docker usa `.env.local` en la raíz, generado a partir de `.env.examp
 
 | Variable Docker | Uso |
 | --- | --- |
-| `WEB_PORT` / `API_PORT` / `POSTGRES_PORT` | Puertos preferidos del computador; se busca una alternativa si están ocupados |
+| `WEB_PORT` / `API_PORT` / `POSTGRES_PORT` / `MAILPIT_PORT` / `MAILPIT_SMTP_PORT` | Puertos preferidos del computador; se busca una alternativa si están ocupados |
 | `POSTGRES_USER` / `POSTGRES_DB` | Usuario y base locales, por defecto `farmacia` |
 | `POSTGRES_PASSWORD` | Secreto local generado automáticamente |
 
