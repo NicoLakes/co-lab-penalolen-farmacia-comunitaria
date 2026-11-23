@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import type { Account } from '../auth/AccountPanel';
+import { StockMovementsPanel } from './StockMovementsPanel';
 import { UsersPanel } from './UsersPanel';
 
 interface AdminSectionProps {
@@ -8,6 +10,7 @@ interface AdminSectionProps {
 
 export function AdminSection({ account, onBackToCatalog }: AdminSectionProps) {
   const isUserAdmin = account.roles.includes('user_admin');
+  const [activeTab, setActiveTab] = useState<'users' | 'movements'>('users');
 
   return (
     <section className="orders-section admin-section" aria-label="Panel de administración">
@@ -28,11 +31,29 @@ export function AdminSection({ account, onBackToCatalog }: AdminSectionProps) {
       {isUserAdmin ? (
         <>
           <nav className="admin-tabs" aria-label="Secciones del panel">
-            <button type="button" className="admin-tab activo" aria-current="page">
+            <button
+              type="button"
+              className={activeTab === 'users' ? 'admin-tab activo' : 'admin-tab'}
+              aria-current={activeTab === 'users' ? 'page' : undefined}
+              onClick={() => setActiveTab('users')}
+            >
               Usuarios
             </button>
+            <button
+              type="button"
+              className={activeTab === 'movements' ? 'admin-tab activo' : 'admin-tab'}
+              aria-current={activeTab === 'movements' ? 'page' : undefined}
+              onClick={() => setActiveTab('movements')}
+            >
+              Movimientos de stock
+            </button>
           </nav>
-          <UsersPanel currentUserEmail={account.email} />
+
+          {activeTab === 'users' ? (
+            <UsersPanel currentUserEmail={account.email} />
+          ) : (
+            <StockMovementsPanel />
+          )}
         </>
       ) : (
         <p className="orders-empty">

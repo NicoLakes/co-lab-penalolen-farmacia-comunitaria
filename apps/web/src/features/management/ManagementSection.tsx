@@ -1,10 +1,12 @@
+import { useState } from 'react';
 import type { Account } from '../auth/AccountPanel';
+import { StaffOrdersPanel } from './StaffOrdersPanel';
 import { StockPanel } from './StockPanel';
 
 interface ManagementSectionProps {
   account: Account;
   onBackToCatalog: () => void;
-  onCatalogChanged?: () => void;
+  onCatalogChanged?: (() => void) | undefined;
 }
 
 export function ManagementSection({
@@ -13,6 +15,7 @@ export function ManagementSection({
   onCatalogChanged,
 }: ManagementSectionProps) {
   const isStaff = account.roles.includes('pharmacy_operator');
+  const [activeTab, setActiveTab] = useState<'orders' | 'stock'>('orders');
 
   return (
     <section className="orders-section admin-section" aria-label="Panel de gestión">
@@ -33,11 +36,29 @@ export function ManagementSection({
       {isStaff ? (
         <>
           <nav className="admin-tabs" aria-label="Secciones de gestión">
-            <button type="button" className="admin-tab activo" aria-current="page">
+            <button
+              type="button"
+              className={activeTab === 'orders' ? 'admin-tab activo' : 'admin-tab'}
+              aria-current={activeTab === 'orders' ? 'page' : undefined}
+              onClick={() => setActiveTab('orders')}
+            >
+              Pedidos
+            </button>
+            <button
+              type="button"
+              className={activeTab === 'stock' ? 'admin-tab activo' : 'admin-tab'}
+              aria-current={activeTab === 'stock' ? 'page' : undefined}
+              onClick={() => setActiveTab('stock')}
+            >
               Stock
             </button>
           </nav>
-          <StockPanel onCatalogChanged={onCatalogChanged} />
+
+          {activeTab === 'orders' ? (
+            <StaffOrdersPanel onCatalogChanged={onCatalogChanged} />
+          ) : (
+            <StockPanel onCatalogChanged={onCatalogChanged} />
+          )}
         </>
       ) : (
         <p className="orders-empty">

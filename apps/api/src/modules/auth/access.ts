@@ -5,9 +5,9 @@ import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { authIssuer } from './auth.js';
 
 const rolePermissions = {
-  buyer: ['orders.create', 'orders.read_own', 'orders.cancel_own'],
+  buyer: ['orders.create', 'orders.read_own', 'orders.cancel_own', 'orders.pay_own'],
   pharmacy_operator: ['orders.read_for_fulfillment', 'orders.fulfill', 'catalog.manage', 'inventory.manage'],
-  user_admin: ['users.manage_access'],
+  user_admin: ['users.manage_access', 'inventory.read_audit'],
 } as const;
 
 export type Role = keyof typeof rolePermissions;

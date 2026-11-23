@@ -4,6 +4,7 @@ import {
   getMyOrderDetail,
   listMyOrders,
   OrdersApiError,
+  payMyOrder,
 } from './orders.api';
 import type { OrderDetail, OrderStatus, OrderSummary } from './orders.api';
 
@@ -49,8 +50,10 @@ export function OrdersSection({
   const [detailError, setDetailError] = useState<Record<string, string>>({});
   const [confirmingCancelId, setConfirmingCancelId] = useState<string | null>(null);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
+  const [payingId, setPayingId] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState('');
   const cancelOperationKeys = useRef<Map<string, string>>(new Map());
+  const payOperationKeys = useRef<Map<string, string>>(new Map());
 
   const loadOrders = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
@@ -100,6 +103,40 @@ export function OrdersSection({
       }));
     } finally {
       setDetailLoadingId((current) => (current === orderId ? null : current));
+    }
+  }
+
+  async function handlePay(orderId: string) {
+    if (payingId || cancellingId) return;
+    setPayingId(orderId);
+    setActionMessage('');
+    setError('');
+
+    let operationId = payOperationKeys.current.get(orderId);
+    if (!operationId) {
+      operationId = crypto.randomUUID();
+      payOperationKeys.current.set(orderId, operationId);
+    }
+
+    try {
+      const updated = await payMyOrder(orderId, operationId);
+      payOperationKeys.current.delete(orderId);
+      setOrders((current) => current.map((order) => (order.id === updated.id ? updated : order)));
+      setDetailsById((current) => {
+        const existing = current[updated.id];
+        if (!existing) return current;
+        return { ...current, [updated.id]: { ...existing, ...updated } };
+      });
+      setConfirmingCancelId((current) => (current === updated.id ? null : current));
+      setActionMessage(`Pago confirmado para la solicitud ${updated.orderNumber}. La farmacia ya puede preparar tu pedido.`);
+    } catch (failure: unknown) {
+      setError(
+        failure instanceof OrdersApiError
+          ? failure.message
+          : 'No pudimos confirmar el pago del pedido. Inténtalo de nuevo.',
+      );
+    } finally {
+      setPayingId(null);
     }
   }
 
@@ -240,6 +277,17 @@ export function OrdersSection({
                   >
                     {isExpanded ? 'Ocultar detalle' : 'Ver detalle'}
                   </button>
+
+                  {order.status === 'pending_payment' && !isConfirmingCancel && (
+                    <button
+                      type="button"
+                      className="btn-agregar"
+                      disabled={Boolean(payingId || cancellingId)}
+                      onClick={() => void handlePay(order.id)}
+                    >
+                      {payingId === order.id ? 'Procesando pago…' : 'Pagar ahora'}
+                    </button>
+                  )}
 
                   {order.status === 'pending_payment' && !isConfirmingCancel && (
                     <button

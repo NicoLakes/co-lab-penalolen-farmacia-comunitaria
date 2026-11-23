@@ -1361,3 +1361,49 @@ body {
 .stock-adjust-row .input-busqueda:not(.stock-qty-input) {
   flex: 1 1 220px;
 }
+
+.staff-order-buyer {
+  margin: 0 0 0.25rem;
+}
+
+/* Historial de movimientos de stock (Auditoría Admin) */
+.movement-delta-pos,
+.movement-delta-neg {
+  display: inline-block;
+  min-width: 2.5rem;
+  text-align: center;
+  padding: 0.22rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.84em;
+  font-weight: 800;
+}
+
+.movement-delta-pos {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.movement-delta-neg {
+  background: #fbeaea;
+  color: #912222;
+}
+
+.movement-meta-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  font-size: 0.85em;
+  color: var(--penalolen-text-muted);
+}
+
+.alerta-exito-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.7rem;
+}
+
+.alerta-exito-actions .btn-ver-pedidos-exito {
+  margin-top: 0;
+}

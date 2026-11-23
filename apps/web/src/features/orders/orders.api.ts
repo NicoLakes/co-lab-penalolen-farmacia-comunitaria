@@ -118,10 +118,13 @@ async function readErrorCode(response: Response): Promise<string> {
   return 'request_failed';
 }
 
-function mapStatusMessage(status: number, fallback: string): string {
+function mapStatusMessage(status: number, code: string, fallback: string): string {
   if (status === 401) return 'Tu sesión expiró. Inicia sesión nuevamente para ver tus pedidos.';
   if (status === 403) return 'Tu cuenta no tiene permisos habilitados para consultar pedidos.';
   if (status === 404) return 'No encontramos ese pedido.';
+  if (status === 409 && code === 'expired') {
+    return 'El plazo de reserva de esta solicitud venció. Crea una nueva solicitud desde el catálogo.';
+  }
   if (status === 409) return 'El estado actual del pedido ya no permite esta acción.';
   return fallback;
 }
@@ -133,7 +136,7 @@ export async function listMyOrders(signal?: AbortSignal): Promise<OrderSummary[]
     throw new OrdersApiError(
       response.status,
       code,
-      mapStatusMessage(response.status, 'No pudimos cargar tus pedidos. Inténtalo de nuevo.'),
+      mapStatusMessage(response.status, code, 'No pudimos cargar tus pedidos. Inténtalo de nuevo.'),
     );
   }
   const body: unknown = await response.json();
@@ -150,7 +153,7 @@ export async function getMyOrderDetail(orderId: string, signal?: AbortSignal): P
     throw new OrdersApiError(
       response.status,
       code,
-      mapStatusMessage(response.status, 'No pudimos cargar el detalle del pedido.'),
+      mapStatusMessage(response.status, code, 'No pudimos cargar el detalle del pedido.'),
     );
   }
   const body: unknown = await response.json();
@@ -171,12 +174,33 @@ export async function cancelMyOrder(orderId: string, operationId: string): Promi
     throw new OrdersApiError(
       response.status,
       code,
-      mapStatusMessage(response.status, 'No pudimos cancelar el pedido. Inténtalo de nuevo.'),
+      mapStatusMessage(response.status, code, 'No pudimos cancelar el pedido. Inténtalo de nuevo.'),
     );
   }
   const body: unknown = await response.json();
   if (!isOrderSummary(body)) {
     throw new OrdersApiError(502, 'invalid_response', 'La API devolvió una respuesta inválida al cancelar.');
+  }
+  return body;
+}
+
+export async function payMyOrder(orderId: string, operationId: string): Promise<OrderSummary> {
+  const response = await fetch(`/api/orders/${encodeURIComponent(orderId)}/pay`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ operationId }),
+  });
+  if (!response.ok) {
+    const code = await readErrorCode(response);
+    throw new OrdersApiError(
+      response.status,
+      code,
+      mapStatusMessage(response.status, code, 'No pudimos confirmar el pago del pedido. Inténtalo de nuevo.'),
+    );
+  }
+  const body: unknown = await response.json();
+  if (!isOrderSummary(body)) {
+    throw new OrdersApiError(502, 'invalid_response', 'La API devolvió una respuesta inválida al pagar.');
   }
   return body;
 }

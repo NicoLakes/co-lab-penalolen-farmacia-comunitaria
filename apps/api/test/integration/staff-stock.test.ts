@@ -159,4 +159,20 @@ test('staff stock endpoints enforce permissions, audit movements, visibility and
   const finalList = await app.inject({ method: 'GET', url: '/api/staff/stock', headers: staff.headers });
   assert.equal(finalList.statusCode, 200);
   assert.equal(finalList.json<{ id: string }[]>().length, 1);
+
+  assert.equal((await app.inject({ method: 'GET', url: '/api/admin/inventory-movements', headers: buyer.headers })).statusCode, 403);
+  assert.equal((await app.inject({ method: 'GET', url: '/api/admin/inventory-movements', headers: staff.headers })).statusCode, 403);
+  const auditAll = await app.inject({ method: 'GET', url: '/api/admin/inventory-movements', headers: admin.headers });
+  assert.equal(auditAll.statusCode, 200, auditAll.body);
+  const auditRows = auditAll.json<{ movementType: string; actorEmail: string | null; productCode: string }[]>();
+  assert.equal(auditRows.length, 2);
+  assert.equal(auditRows[0]?.actorEmail, 'staff@example.test');
+  assert.equal(auditRows[0]?.productCode, 'MED-100');
+  const auditAdjustments = await app.inject({
+    method: 'GET',
+    url: '/api/admin/inventory-movements?movementType=adjustment&q=conteo',
+    headers: admin.headers,
+  });
+  assert.equal(auditAdjustments.statusCode, 200);
+  assert.equal(auditAdjustments.json<unknown[]>().length, 1);
 });

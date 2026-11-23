@@ -8,7 +8,9 @@ import {
   adjustProductStock,
   createManagedProduct,
   deleteManagedProduct,
+  listInventoryMovements,
   listManagedStock,
+  movementTypes,
   saleConditions,
   StockManagementError,
   updateManagedProduct,
@@ -16,6 +18,7 @@ import {
 import type {
   AdjustProductStockInput,
   CreateManagedProductInput,
+  InventoryMovementType,
   UpdateManagedProductInput,
 } from './stock-management.service.js';
 
@@ -103,6 +106,32 @@ export function registerInventoryRoutes(
   authorize: Authorize,
   policy?: OrderPolicy,
 ) {
+  app.get<{ Querystring: { q?: string; movementType?: InventoryMovementType; limit?: number } }>(
+    '/api/admin/inventory-movements',
+    {
+      schema: {
+        querystring: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            q: { type: 'string', maxLength: 200 },
+            movementType: { enum: [...movementTypes] },
+            limit: { type: 'integer', minimum: 1, maximum: 200 },
+          },
+        },
+      },
+    },
+    async (request, reply) => {
+      const admin = await authorize(request, reply, 'inventory.read_audit');
+      if (!admin) return reply;
+      return listInventoryMovements(db, {
+        query: request.query.q,
+        movementType: request.query.movementType,
+        limit: request.query.limit,
+      });
+    },
+  );
+
   app.get('/api/staff/stock', async (request, reply) => {
     const staff = await authorize(request, reply, 'inventory.manage');
     if (!staff) return reply;

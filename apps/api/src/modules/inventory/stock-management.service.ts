@@ -1,5 +1,6 @@
 import type { Database } from '@farmacia/database';
 import {
+  authUsers,
   inventoryBalances,
   inventoryLocations,
   inventoryLots,
@@ -10,8 +11,10 @@ import {
   products,
   suppliers,
   therapeuticCategories,
+  users,
 } from '@farmacia/database/schema';
-import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
+import { authIssuer } from '../auth/auth.js';
 import { maxInteger } from '../orders/order-input.js';
 import { eligibleInventory, InventoryError, recordInventoryMovement } from './inventory.service.js';
 
@@ -460,5 +463,101 @@ export async function deleteManagedProduct(db: Database, productId: string): Pro
       await tx.delete(inventoryBalances).where(inArray(inventoryBalances.id, balanceIds));
     }
     await tx.delete(products).where(eq(products.id, productId));
+  });
+}
+
+export const movementTypes = [
+  'opening',
+  'receipt',
+  'sale',
+  'adjustment',
+  'transfer_out',
+  'transfer_in',
+] as const;
+
+export type InventoryMovementType = typeof movementTypes[number];
+
+export interface InventoryMovementAuditItem {
+  id: string;
+  createdAt: Date;
+  movementType: InventoryMovementType;
+  quantityDelta: number;
+  reason: string;
+  actorReference: string;
+  actorEmail: string | null;
+  productCode: string;
+  productName: string;
+  locationName: string;
+  lotNumber: string | null;
+}
+
+const UUID_REGEX = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
+
+function extractActorUserId(actorReference: string): string | null {
+  const match = /^(?:user|buyer):(.+)$/.exec(actorReference);
+  const candidate = match?.[1];
+  return candidate && UUID_REGEX.test(candidate) ? candidate.toLowerCase() : null;
+}
+
+export async function listInventoryMovements(
+  db: Database,
+  options: { query?: string | undefined; movementType?: InventoryMovementType | undefined; limit?: number | undefined } = {},
+): Promise<InventoryMovementAuditItem[]> {
+  const safeLimit = Math.min(Math.max(Math.trunc(options.limit ?? 100), 1), 200);
+  const trimmed = options.query?.trim().toLowerCase() ?? '';
+  const escaped = trimmed.replaceAll('\\', '\\\\').replaceAll('%', '\\%').replaceAll('_', '\\_');
+  const pattern = `%${escaped}%`;
+
+  const conditions = [];
+  if (options.movementType) {
+    conditions.push(eq(inventoryMovements.movementType, options.movementType));
+  }
+  if (trimmed) {
+    conditions.push(or(
+      sql`lower(${products.code}) LIKE ${pattern} ESCAPE '\\'`,
+      sql`lower(${products.name}) LIKE ${pattern} ESCAPE '\\'`,
+      sql`lower(${inventoryMovements.reason}) LIKE ${pattern} ESCAPE '\\'`,
+    ));
+  }
+
+  const rows = await db.select({
+    id: inventoryMovements.id,
+    createdAt: inventoryMovements.createdAt,
+    movementType: inventoryMovements.movementType,
+    quantityDelta: inventoryMovements.quantityDelta,
+    reason: inventoryMovements.reason,
+    actorReference: inventoryMovements.actorReference,
+    productCode: products.code,
+    productName: products.name,
+    locationName: inventoryLocations.name,
+    lotNumber: inventoryLots.lotNumber,
+  }).from(inventoryMovements)
+    .innerJoin(inventoryBalances, eq(inventoryBalances.id, inventoryMovements.balanceId))
+    .innerJoin(products, eq(products.id, inventoryBalances.productId))
+    .innerJoin(inventoryLocations, eq(inventoryLocations.id, inventoryBalances.locationId))
+    .leftJoin(inventoryLots, eq(inventoryLots.id, inventoryBalances.lotId))
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .orderBy(desc(inventoryMovements.createdAt), desc(inventoryMovements.id))
+    .limit(safeLimit);
+
+  const actorUserIds = [...new Set(
+    rows.map((row) => extractActorUserId(row.actorReference)).filter((id): id is string => id !== null),
+  )];
+  const emailByUserId = new Map<string, string>();
+  if (actorUserIds.length > 0) {
+    const actorRows = await db.select({ id: users.id, email: authUsers.email }).from(users)
+      .innerJoin(authUsers, and(eq(users.identityIssuer, authIssuer), eq(authUsers.id, users.identitySubject)))
+      .where(inArray(users.id, actorUserIds));
+    for (const actor of actorRows) {
+      emailByUserId.set(actor.id, actor.email);
+    }
+  }
+
+  return rows.map((row) => {
+    const actorId = extractActorUserId(row.actorReference);
+    return {
+      ...row,
+      actorEmail: actorId ? (emailByUserId.get(actorId) ?? null) : null,
+    };
   });
 }

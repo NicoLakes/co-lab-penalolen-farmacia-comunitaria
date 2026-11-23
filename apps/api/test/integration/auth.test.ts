@@ -9,7 +9,7 @@ import { registerAccessRoutes } from '../../src/modules/auth/access-routes.js';
 import { createAuth } from '../../src/modules/auth/auth.js';
 import { registerCatalogRoutes } from '../../src/modules/catalog/catalog.routes.js';
 import { recordInventoryMovement } from '../../src/modules/inventory/inventory.service.js';
-import { confirmOrderPayment } from '../../src/modules/orders/order-lifecycle.js';
+
 import { isolatedDatabase } from './isolated-database.js';
 
 test('Better Auth sessions enforce role changes and order ownership at the HTTP boundary', async (t) => {
@@ -172,7 +172,14 @@ test('Better Auth sessions enforce role changes and order ownership at the HTTP 
 
   const staffUrl = `/api/fulfillment/orders/${view.id}`;
   assert.equal((await app.inject({ method: 'GET', url: staffUrl, headers: operator.headers })).statusCode, 404);
-  await confirmOrderPayment(db, view.id, 2000n, { operationId: randomUUID(), actorReference: 'test:payment' });
+  assert.equal((await app.inject({
+    method: 'POST', url: `${url}/pay`, headers: other.headers, payload: { operationId: randomUUID() },
+  })).statusCode, 404);
+  const paid = await app.inject({
+    method: 'POST', url: `${url}/pay`, headers: buyer.headers, payload: { operationId: randomUUID() },
+  });
+  assert.equal(paid.statusCode, 200, paid.body);
+  assert.equal(paid.json<{ status: string }>().status, 'confirmed');
   assert.equal((await app.inject({ method: 'GET', url: staffUrl, headers: operator.headers })).statusCode, 200);
   assert.equal((await app.inject({ method: 'GET', url: staffUrl, headers: admin.headers })).statusCode, 403);
   const completed = await app.inject({
@@ -180,6 +187,25 @@ test('Better Auth sessions enforce role changes and order ownership at the HTTP 
   });
   assert.equal(completed.statusCode, 200, completed.body);
   assert.equal(completed.json<{ status: string }>().status, 'fulfilled');
+  const confirmedList = await app.inject({ method: 'GET', url: '/api/fulfillment/orders?status=confirmed', headers: operator.headers });
+  assert.equal(confirmedList.statusCode, 200);
+  assert.deepEqual(confirmedList.json(), []);
+  const fulfilledList = await app.inject({ method: 'GET', url: '/api/fulfillment/orders?status=fulfilled', headers: operator.headers });
+  assert.equal(fulfilledList.statusCode, 200);
+  assert.equal(fulfilledList.json<{ id: string; buyerEmail: string | null }[]>()[0]?.id, view.id);
+  assert.equal(fulfilledList.json<{ id: string; buyerEmail: string | null }[]>()[0]?.buyerEmail, 'buyer@example.test');
+  assert.equal((await app.inject({ method: 'GET', url: staffUrl, headers: operator.headers })).statusCode, 200);
+  assert.equal((await app.inject({
+    method: 'POST', url: '/api/fulfillment/orders/in-person', headers: buyer.headers,
+    payload: { idempotencyKey: randomUUID(), paymentMethod: 'cash', items: [{ productId: product.id, quantity: 1 }] },
+  })).statusCode, 403);
+  const inPerson = await app.inject({
+    method: 'POST', url: '/api/fulfillment/orders/in-person', headers: operator.headers,
+    payload: { idempotencyKey: randomUUID(), paymentMethod: 'bank_transfer', items: [{ productId: product.id, quantity: 1 }] },
+  });
+  assert.equal(inPerson.statusCode, 201, inPerson.body);
+  assert.equal(inPerson.json<{ status: string }>().status, 'fulfilled');
+  assert.equal((await readCatalog()).items.find(({ id }) => id === product.id)?.stock, 1);
 
   assert.equal((await app.inject({ method: 'DELETE', url: roleUrl(buyer.id), headers: admin.headers })).statusCode, 204);
   assert.equal((await app.inject({ method: 'GET', url, headers: buyer.headers })).statusCode, 403);

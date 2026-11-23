@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { OrdersApiError, payMyOrder } from '../orders/orders.api';
 import type { Medicamento } from './medicamentos.mock';
 
 export interface ItemCarrito {
@@ -7,6 +8,7 @@ export interface ItemCarrito {
 }
 
 interface ResumenPedidoCreado {
+  id: string;
   orderNumber: string;
   totalClp: string;
   fulfillmentMethod: 'pickup' | 'delivery';
@@ -45,6 +47,10 @@ export function CarritoPanel({
   const [requiereInicioSesion, setRequiereInicioSesion] = useState(false);
   const alertaRef = useRef<HTMLDivElement>(null);
   const [pedidoExitoso, setPedidoExitoso] = useState<ResumenPedidoCreado | null>(null);
+  const [pagandoExito, setPagandoExito] = useState(false);
+  const [pedidoPagado, setPedidoPagado] = useState(false);
+  const [errorPagoExito, setErrorPagoExito] = useState('');
+  const payKeyRef = useRef<string | null>(null);
   const lastSubmission = useRef<{ account: string; request: string; key: string } | null>(null);
 
   const totalUnidades = carrito.reduce((acc, item) => acc + item.cantidad, 0);
@@ -61,6 +67,9 @@ export function CarritoPanel({
     setErrorPedido('');
     setRequiereInicioSesion(false);
     setPedidoExitoso(null);
+    setPedidoPagado(false);
+    setErrorPagoExito('');
+    payKeyRef.current = null;
 
     if (!usuarioEmail) {
       setRequiereInicioSesion(true);
@@ -110,6 +119,7 @@ export function CarritoPanel({
         return;
       }
       if (!respuesta.ok || !datos || typeof datos !== 'object'
+        || !('id' in datos) || typeof datos.id !== 'string'
         || !('orderNumber' in datos) || typeof datos.orderNumber !== 'string'
         || !('totalClp' in datos) || typeof datos.totalClp !== 'string' || !/^\d{1,19}$/.test(datos.totalClp)
         || !('fulfillmentMethod' in datos) || (datos.fulfillmentMethod !== 'pickup' && datos.fulfillmentMethod !== 'delivery')) {
@@ -122,14 +132,34 @@ export function CarritoPanel({
         return;
       }
 
-      const { orderNumber, totalClp, fulfillmentMethod } = datos;
-      setPedidoExitoso({ orderNumber, totalClp, fulfillmentMethod });
+      const { id, orderNumber, totalClp, fulfillmentMethod } = datos;
+      setPedidoExitoso({ id, orderNumber, totalClp, fulfillmentMethod });
       lastSubmission.current = null;
       onPedidoCreado?.();
     } catch {
       setErrorPedido('Error de conexión al registrar tu pedido.');
     } finally {
       setEnviando(false);
+    }
+  }
+
+  async function pagarPedidoReciente() {
+    if (!pedidoExitoso || pagandoExito || pedidoPagado) return;
+    setPagandoExito(true);
+    setErrorPagoExito('');
+    if (!payKeyRef.current) payKeyRef.current = crypto.randomUUID();
+    try {
+      await payMyOrder(pedidoExitoso.id, payKeyRef.current);
+      setPedidoPagado(true);
+      payKeyRef.current = null;
+    } catch (failure: unknown) {
+      setErrorPagoExito(
+        failure instanceof OrdersApiError
+          ? failure.message
+          : 'No pudimos confirmar el pago. Inténtalo desde Mis pedidos.',
+      );
+    } finally {
+      setPagandoExito(false);
     }
   }
 
@@ -154,23 +184,40 @@ export function CarritoPanel({
 
         {pedidoExitoso && (
           <div className="alerta-pedido-exito" role="status">
-            <strong>Solicitud registrada</strong>
+            <strong>{pedidoPagado ? 'Pago confirmado' : 'Solicitud registrada'}</strong>
             <p>
               Número de orden: <strong>{pedidoExitoso.orderNumber}</strong> · Total:{' '}
               <strong>${BigInt(pedidoExitoso.totalClp).toLocaleString('es-CL')}</strong>
             </p>
             <p>
-              Stock reservado para {pedidoExitoso.fulfillmentMethod === 'pickup' ? 'retiro en farmacia' : 'despacho a domicilio'}.
+              {pedidoPagado
+                ? 'Tu pedido ya pasó a la farmacia para preparación y entrega.'
+                : `Stock reservado para ${pedidoExitoso.fulfillmentMethod === 'pickup' ? 'retiro en farmacia' : 'despacho a domicilio'}.`}
             </p>
-            {onVerMisPedidos && (
-              <button
-                type="button"
-                className="btn-ver-pedidos-exito"
-                onClick={onVerMisPedidos}
-              >
-                Ver en Mis pedidos
-              </button>
+            {errorPagoExito && (
+              <p className="carrito-alerta-error" role="alert">{errorPagoExito}</p>
             )}
+            <div className="alerta-exito-actions">
+              {!pedidoPagado && (
+                <button
+                  type="button"
+                  className="btn-agregar"
+                  disabled={pagandoExito}
+                  onClick={() => void pagarPedidoReciente()}
+                >
+                  {pagandoExito ? 'Procesando pago…' : 'Pagar ahora'}
+                </button>
+              )}
+              {onVerMisPedidos && (
+                <button
+                  type="button"
+                  className="btn-ver-pedidos-exito"
+                  onClick={onVerMisPedidos}
+                >
+                  Ver en Mis pedidos
+                </button>
+              )}
+            </div>
           </div>
         )}
 

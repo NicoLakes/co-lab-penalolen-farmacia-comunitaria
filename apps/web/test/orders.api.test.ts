@@ -5,6 +5,7 @@ import {
   getMyOrderDetail,
   listMyOrders,
   OrdersApiError,
+  payMyOrder,
 } from '../src/features/orders/orders.api.js';
 
 afterEach(() => mock.restoreAll());
@@ -83,4 +84,25 @@ test('cancelMyOrder posts operationId and returns updated summary', async () => 
   assert.equal(call?.arguments[1]?.method, 'POST');
   assert.equal(call?.arguments[1]?.body, JSON.stringify({ operationId }));
   assert.deepEqual(result, cancelled);
+});
+
+test('payMyOrder posts operationId and handles expired 409 errors', async () => {
+  const confirmed = { ...sampleSummary, status: 'confirmed' as const };
+  const operationId = '44444444-4444-4444-8444-444444444444';
+  const fetchMock = mock.method(globalThis, 'fetch', async () => Response.json(confirmed));
+
+  const result = await payMyOrder(sampleSummary.id, operationId);
+  assert.equal(fetchMock.mock.calls[0]?.arguments[0], `/api/orders/${sampleSummary.id}/pay`);
+  assert.equal(fetchMock.mock.calls[0]?.arguments[1]?.body, JSON.stringify({ operationId }));
+  assert.equal(result.status, 'confirmed');
+
+  mock.restoreAll();
+  mock.method(globalThis, 'fetch', async () =>
+    Response.json({ code: 'expired' }, { status: 409 }),
+  );
+  await assert.rejects(
+    payMyOrder(sampleSummary.id, operationId),
+    (error: unknown) =>
+      error instanceof OrdersApiError && error.status === 409 && error.code === 'expired',
+  );
 });
