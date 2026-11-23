@@ -83,7 +83,6 @@ services:
         - action: sync
           path: ./apps/api/src
           target: /workspace/apps/api/src
-          initial_sync: true
         - action: rebuild
           path: ./apps/api/package.json
         - action: rebuild
@@ -125,11 +124,9 @@ services:
         - action: sync
           path: ./apps/web/src
           target: /workspace/apps/web/src
-          initial_sync: true
         - action: sync
           path: ./apps/web/index.html
           target: /workspace/apps/web/index.html
-          initial_sync: true
         - action: sync+restart
           path: ./apps/web/vite.config.ts
           target: /workspace/apps/web/vite.config.ts
