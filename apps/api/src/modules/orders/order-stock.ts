@@ -6,13 +6,28 @@ import { eligibleInventory } from '../inventory/inventory.service.js';
 
 export type OrderTransaction = Parameters<Parameters<Database['transaction']>[0]>[0];
 export const supportedSaleConditions = ['direct_sale', 'not_applicable'] as const;
+export const prescriptionSaleConditions = [
+  'simple_prescription',
+  'retained_prescription',
+  'retained_prescription_stock_control',
+] as const;
+export const onlineOrderSaleConditions = [
+  ...supportedSaleConditions,
+  ...prescriptionSaleConditions,
+] as const;
+
+export type OnlineOrderSaleCondition = (typeof onlineOrderSaleConditions)[number];
 
 export function lockBalances(tx: OrderTransaction, condition: SQL | undefined) {
   return tx.select().from(inventoryBalances).where(condition)
     .orderBy(inventoryBalances.id).for('update');
 }
 
-export async function findEligibleBalances(tx: OrderTransaction, balanceIds: string[]) {
+export async function findEligibleBalances(
+  tx: OrderTransaction,
+  balanceIds: string[],
+  allowedSaleConditions: readonly OnlineOrderSaleCondition[] = onlineOrderSaleConditions,
+) {
   if (balanceIds.length === 0) return [];
   return tx.select({
     id: inventoryBalances.id,
@@ -21,8 +36,11 @@ export async function findEligibleBalances(tx: OrderTransaction, balanceIds: str
     .innerJoin(products, eq(products.id, inventoryBalances.productId))
     .innerJoin(inventoryLocations, eq(inventoryLocations.id, inventoryBalances.locationId))
     .leftJoin(inventoryLots, eq(inventoryLots.id, inventoryBalances.lotId))
-    .where(and(inArray(inventoryBalances.id, balanceIds), eligibleInventory(),
-      inArray(products.saleCondition, supportedSaleConditions)))
+    .where(and(
+      inArray(inventoryBalances.id, balanceIds),
+      eligibleInventory(),
+      inArray(products.saleCondition, [...allowedSaleConditions]),
+    ))
     .orderBy(sql`${inventoryLots.expiresOn} ASC NULLS LAST`, inventoryBalances.id)
     .for('share', { of: [products, inventoryLocations] });
 }

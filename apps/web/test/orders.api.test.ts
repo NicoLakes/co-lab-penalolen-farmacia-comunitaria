@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { afterEach, mock, test } from 'node:test';
 import {
   cancelMyOrder,
+  createPrescriptionOrder,
   getMyOrderDetail,
   listMyOrders,
   OrdersApiError,
@@ -20,12 +21,24 @@ const sampleSummary = {
   createdAt: '2026-11-22T03:45:00.000Z',
 };
 
-test('listMyOrders returns validated order summaries', async () => {
-  const fetchMock = mock.method(globalThis, 'fetch', async () => Response.json([sampleSummary]));
+const samplePrescription = {
+  id: '66666666-6666-4666-8666-666666666666',
+  fileName: 'receta-marzo.pdf',
+  mimeType: 'application/pdf',
+  fileSizeBytes: 12048,
+  status: 'pending' as const,
+  reviewedAt: null,
+  rejectionReason: null,
+  createdAt: '2026-11-22T03:45:00.000Z',
+};
+
+test('listMyOrders returns validated order summaries including pending_review with null deadline', async () => {
+  const pendingReview = { ...sampleSummary, status: 'pending_review' as const, reservationExpiresAt: null };
+  const fetchMock = mock.method(globalThis, 'fetch', async () => Response.json([pendingReview, sampleSummary]));
   const orders = await listMyOrders();
 
   assert.equal(fetchMock.mock.calls[0]?.arguments[0], '/api/orders');
-  assert.deepEqual(orders, [sampleSummary]);
+  assert.deepEqual(orders, [pendingReview, sampleSummary]);
 });
 
 test('listMyOrders rejects unauthorized responses with OrdersApiError', async () => {
@@ -39,9 +52,11 @@ test('listMyOrders rejects unauthorized responses with OrdersApiError', async ()
   );
 });
 
-test('getMyOrderDetail validates items and delivery details', async () => {
+test('getMyOrderDetail validates items, delivery details and prescription metadata', async () => {
   const sampleDetail = {
     ...sampleSummary,
+    status: 'rejected' as const,
+    reservationExpiresAt: null,
     fulfillmentMethod: 'delivery' as const,
     deliveryDetails: {
       recipientName: 'Ana Pérez',
@@ -58,6 +73,12 @@ test('getMyOrderDetail validates items and delivery details', async () => {
         unitPriceClp: 1490,
       },
     ],
+    prescription: {
+      ...samplePrescription,
+      status: 'rejected' as const,
+      reviewedAt: '2026-11-22T04:15:00.000Z',
+      rejectionReason: 'Receta borrosa, no se lee la dosis.',
+    },
   };
   mock.method(globalThis, 'fetch', async () => Response.json(sampleDetail));
 
@@ -70,6 +91,44 @@ test('getMyOrderDetail rejects malformed payloads', async () => {
   await assert.rejects(
     getMyOrderDetail(sampleSummary.id),
     (error: unknown) => error instanceof OrdersApiError && error.code === 'invalid_response',
+  );
+});
+
+test('createPrescriptionOrder posts payload and surfaces insufficient_stock productNames', async () => {
+  const createdPayload = {
+    ...sampleSummary,
+    status: 'pending_review' as const,
+    reservationExpiresAt: null,
+    prescription: samplePrescription,
+  };
+  const fetchMock = mock.method(globalThis, 'fetch', async () => Response.json(createdPayload, { status: 201 }));
+  const input = {
+    idempotencyKey: '77777777-7777-4777-8777-777777777777',
+    items: [{ productId: '22222222-2222-4222-8222-222222222222', quantity: 1 }],
+    fulfillment: { method: 'pickup' as const },
+    prescription: {
+      fileName: 'receta-marzo.pdf',
+      mimeType: 'application/pdf' as const,
+      contentBase64: 'JVBERi0xLjc=',
+    },
+  };
+
+  const created = await createPrescriptionOrder(input);
+  assert.equal(fetchMock.mock.calls[0]?.arguments[0], '/api/orders/prescription');
+  assert.equal(created.status, 'pending_review');
+  assert.equal(created.prescription.fileName, 'receta-marzo.pdf');
+
+  mock.restoreAll();
+  mock.method(globalThis, 'fetch', async () =>
+    Response.json({ code: 'insufficient_stock', productNames: ['Acenocumarol 4 mg'] }, { status: 409 }),
+  );
+  await assert.rejects(
+    createPrescriptionOrder(input),
+    (error: unknown) =>
+      error instanceof OrdersApiError
+      && error.status === 409
+      && error.code === 'insufficient_stock'
+      && error.message.includes('Acenocumarol 4 mg'),
   );
 });
 

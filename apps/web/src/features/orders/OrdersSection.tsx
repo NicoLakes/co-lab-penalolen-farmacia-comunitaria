@@ -3,10 +3,11 @@ import {
   cancelMyOrder,
   getMyOrderDetail,
   listMyOrders,
+  myPrescriptionDownloadUrl,
   OrdersApiError,
   payMyOrder,
 } from './orders.api';
-import type { OrderDetail, OrderStatus, OrderSummary } from './orders.api';
+import type { OrderDetail, OrderStatus, OrderSummary, PrescriptionReviewStatus } from './orders.api';
 
 interface OrdersSectionProps {
   modoSimple: boolean;
@@ -15,11 +16,19 @@ interface OrdersSectionProps {
 }
 
 const STATUS_LABELS: Record<OrderStatus, string> = {
+  pending_review: 'En revisión de receta',
   pending_payment: 'Pendiente de pago',
   confirmed: 'Confirmado',
   fulfilled: 'Entregado',
   cancelled: 'Cancelado',
   expired: 'Reserva vencida',
+  rejected: 'Receta rechazada',
+};
+
+const PRESCRIPTION_STATUS_LABELS: Record<PrescriptionReviewStatus, string> = {
+  pending: 'Pendiente de revisión farmacéutica',
+  approved: 'Aprobada por la farmacia',
+  rejected: 'Rechazada por la farmacia',
 };
 
 function formatDateTime(value: string): string {
@@ -34,6 +43,11 @@ function formatDateTime(value: string): string {
 function formatClp(amount: string | number | bigint): string {
   const numeric = typeof amount === 'string' ? BigInt(amount) : amount;
   return `$${numeric.toLocaleString('es-CL')}`;
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
 }
 
 export function OrdersSection({
@@ -183,7 +197,7 @@ export function OrdersSection({
           <p className="orders-subtitle">
             {modoSimple
               ? 'Aquí puede revisar sus solicitudes de medicamentos y su estado actual.'
-              : 'Revisa el estado de tus solicitudes, su detalle y libera reservas pendientes si lo necesitas.'}
+              : 'Revisa el estado de tus solicitudes, recetas en revisión, pagos pendientes y detalle.'}
           </p>
         </div>
         <div className="orders-toolbar-actions">
@@ -235,6 +249,7 @@ export function OrdersSection({
             const orderDetailError = detailError[order.id];
             const isConfirmingCancel = confirmingCancelId === order.id;
             const isCancelling = cancellingId === order.id;
+            const canCancel = order.status === 'pending_payment' || order.status === 'pending_review';
 
             return (
               <li key={order.id} className="order-card">
@@ -256,9 +271,19 @@ export function OrdersSection({
                         ? 'Retiro en farmacia'
                         : 'Despacho a domicilio'}
                     </strong>
-                    {order.status === 'pending_payment' && (
+                    {order.status === 'pending_review' && (
+                      <p className="order-review-note">
+                        Stock reservado mientras la farmacia revisa tu receta. Te avisaremos por correo.
+                      </p>
+                    )}
+                    {order.status === 'pending_payment' && order.reservationExpiresAt && (
                       <p className="order-expiry">
                         Reserva vigente hasta: {formatDateTime(order.reservationExpiresAt)}
+                      </p>
+                    )}
+                    {order.status === 'rejected' && (
+                      <p className="order-rejected-note">
+                        Receta no aprobada (stock liberado). Abre «Ver detalle» para revisar el motivo.
                       </p>
                     )}
                   </div>
@@ -289,11 +314,11 @@ export function OrdersSection({
                     </button>
                   )}
 
-                  {order.status === 'pending_payment' && !isConfirmingCancel && (
+                  {canCancel && !isConfirmingCancel && (
                     <button
                       type="button"
                       className="btn-peligro-suave"
-                      disabled={Boolean(cancellingId)}
+                      disabled={Boolean(cancellingId || payingId)}
                       onClick={() => setConfirmingCancelId(order.id)}
                     >
                       Cancelar solicitud
@@ -347,6 +372,34 @@ export function OrdersSection({
                             </li>
                           ))}
                         </ul>
+
+                        {detail.prescription && (
+                          <div className="order-prescription-box">
+                            <h3 className="order-detail-heading">Receta médica adjunta</h3>
+                            <div className="order-prescription-row">
+                              <div>
+                                <strong>{detail.prescription.fileName}</strong>
+                                <span className="order-item-sub">
+                                  {formatFileSize(detail.prescription.fileSizeBytes)} ·{' '}
+                                  {PRESCRIPTION_STATUS_LABELS[detail.prescription.status]}
+                                </span>
+                              </div>
+                              <a
+                                href={myPrescriptionDownloadUrl(order.id)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="btn-secundario btn-link-receta"
+                              >
+                                Ver receta adjunta
+                              </a>
+                            </div>
+                            {detail.prescription.rejectionReason && (
+                              <div className="receta-rejection-box" role="alert">
+                                <strong>Motivo del rechazo:</strong> {detail.prescription.rejectionReason}
+                              </div>
+                            )}
+                          </div>
+                        )}
 
                         {detail.deliveryDetails && (
                           <div className="order-delivery-info">

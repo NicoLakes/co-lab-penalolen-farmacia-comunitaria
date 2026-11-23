@@ -114,6 +114,12 @@ order operations live in `apps/api/src/modules/orders/`.
 status and auditable role assignments. See the
 [pilot configuration](../../README.md#pilot-authentication) for setup.
 
+`0005_prescription_review.sql` extends `order_status` with `pending_review` and
+`rejected`, allows nullable `orders.reservation_expires_at` prior to payment
+approval, adds private prescription review metadata in `order_prescriptions`,
+and updates the order consistency triggers to preserve stock reservation
+invariants across prescription review, approval and rejection.
+
 Las apps comparten un único historial de migraciones. Aplicarlo una sola vez mediante un job de despliegue, antes de arrancar versiones que dependan del nuevo esquema; no migrar automáticamente al iniciar cada app. No modificar migraciones ya aplicadas. Para cambios de esquema que afecten datos existentes, diseñar y revisar la transición antes del despliegue.
 
 ## Producción

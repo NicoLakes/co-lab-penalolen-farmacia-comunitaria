@@ -21,6 +21,7 @@ interface CatalogItem {
   therapeuticCategory: string;
   priceClp: number;
   stock: number;
+  saleCondition?: string;
   requiresPrescription: boolean;
 }
 
@@ -78,6 +79,7 @@ export function CatalogoPage() {
         precio: item.priceClp,
         stock: item.stock,
         requiereReceta: item.requiresPrescription,
+        condicionVenta: typeof item.saleCondition === 'string' ? item.saleCondition : undefined,
       }));
       setMedicamentos(catalogo);
       const porCodigo = new Map(catalogo.map((medicamento) => [medicamento.codigo, medicamento]));
@@ -273,7 +275,11 @@ export function CatalogoPage() {
                 <div className="card-top">
                   <span className="tag-categoria">{med.clasificacionTerapeutica}</span>
                   <span className={med.requiereReceta ? 'tag-receta obligatoria' : 'tag-receta libre'}>
-                    {med.requiereReceta ? 'Requiere Receta Médica' : 'Venta directa'}
+                    {med.condicionVenta === 'prescription_cheque'
+                      ? 'Receta cheque · Solo presencial'
+                      : med.requiereReceta
+                        ? 'Requiere Receta Médica'
+                        : 'Venta directa'}
                   </span>
                 </div>
                 <h2 className="med-titulo">{med.principioActivo}</h2>
@@ -354,6 +360,9 @@ export function CatalogoPage() {
         onVerMisPedidos={() => {
           setCarritoAbierto(false);
           setVistaActiva('pedidos');
+        }}
+        onStockAgotado={() => {
+          void cargarCatalogo();
         }}
         onPedidoCreado={() => {
           setCarrito([]);

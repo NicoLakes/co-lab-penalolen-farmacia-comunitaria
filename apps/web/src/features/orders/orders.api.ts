@@ -1,11 +1,37 @@
 export type OrderStatus =
+  | 'pending_review'
   | 'pending_payment'
   | 'confirmed'
   | 'fulfilled'
   | 'cancelled'
-  | 'expired';
+  | 'expired'
+  | 'rejected';
 
 export type FulfillmentMethod = 'pickup' | 'delivery';
+
+export type PrescriptionReviewStatus = 'pending' | 'approved' | 'rejected';
+
+export const MAX_PRESCRIPTION_BYTES = 5 * 1024 * 1024;
+
+export const ALLOWED_PRESCRIPTION_MIME_TYPES = [
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+] as const;
+
+export type AllowedPrescriptionMimeType = (typeof ALLOWED_PRESCRIPTION_MIME_TYPES)[number];
+
+export interface PrescriptionSummary {
+  id: string;
+  fileName: string;
+  mimeType: string;
+  fileSizeBytes: number;
+  status: PrescriptionReviewStatus;
+  reviewedAt: string | null;
+  rejectionReason: string | null;
+  createdAt: string;
+}
 
 export interface OrderSummary {
   id: string;
@@ -13,7 +39,7 @@ export interface OrderSummary {
   status: OrderStatus;
   fulfillmentMethod: FulfillmentMethod;
   totalClp: string;
-  reservationExpiresAt: string;
+  reservationExpiresAt: string | null;
   createdAt: string;
 }
 
@@ -35,6 +61,24 @@ export interface OrderItemDetail {
 export interface OrderDetail extends OrderSummary {
   deliveryDetails: OrderDeliveryDetails | null;
   items: OrderItemDetail[];
+  prescription?: PrescriptionSummary | null;
+}
+
+export interface CreatePrescriptionOrderInput {
+  idempotencyKey: string;
+  items: readonly { productId: string; quantity: number }[];
+  fulfillment:
+    | { method: 'pickup' }
+    | { method: 'delivery'; details: OrderDeliveryDetails };
+  prescription: {
+    fileName: string;
+    mimeType: AllowedPrescriptionMimeType;
+    contentBase64: string;
+  };
+}
+
+export interface CreatedPrescriptionOrder extends OrderSummary {
+  prescription: PrescriptionSummary;
 }
 
 export class OrdersApiError extends Error {
@@ -42,19 +86,46 @@ export class OrdersApiError extends Error {
     readonly status: number,
     readonly code: string,
     message: string,
+    readonly productNames?: readonly string[],
   ) {
     super(message);
     this.name = 'OrdersApiError';
   }
 }
 
-const VALID_STATUSES: readonly OrderStatus[] = [
+export const VALID_ORDER_STATUSES: readonly OrderStatus[] = [
+  'pending_review',
   'pending_payment',
   'confirmed',
   'fulfilled',
   'cancelled',
   'expired',
+  'rejected',
 ];
+
+const VALID_PRESCRIPTION_STATUSES: readonly PrescriptionReviewStatus[] = [
+  'pending',
+  'approved',
+  'rejected',
+];
+
+export function isPrescriptionSummary(value: unknown): value is PrescriptionSummary {
+  if (!value || typeof value !== 'object') return false;
+  const row = value as Record<string, unknown>;
+  return (
+    typeof row.id === 'string'
+    && typeof row.fileName === 'string'
+    && typeof row.mimeType === 'string'
+    && typeof row.fileSizeBytes === 'number'
+    && Number.isSafeInteger(row.fileSizeBytes)
+    && row.fileSizeBytes > 0
+    && typeof row.status === 'string'
+    && VALID_PRESCRIPTION_STATUSES.some((status) => status === row.status)
+    && (row.reviewedAt === null || typeof row.reviewedAt === 'string')
+    && (row.rejectionReason === null || typeof row.rejectionReason === 'string')
+    && typeof row.createdAt === 'string'
+  );
+}
 
 function isOrderSummary(value: unknown): value is OrderSummary {
   if (!value || typeof value !== 'object') return false;
@@ -63,11 +134,11 @@ function isOrderSummary(value: unknown): value is OrderSummary {
     typeof row.id === 'string'
     && typeof row.orderNumber === 'string'
     && typeof row.status === 'string'
-    && VALID_STATUSES.some((status) => status === row.status)
+    && VALID_ORDER_STATUSES.some((status) => status === row.status)
     && (row.fulfillmentMethod === 'pickup' || row.fulfillmentMethod === 'delivery')
     && typeof row.totalClp === 'string'
     && /^\d{1,19}$/.test(row.totalClp)
-    && typeof row.reservationExpiresAt === 'string'
+    && (row.reservationExpiresAt === null || typeof row.reservationExpiresAt === 'string')
     && typeof row.createdAt === 'string'
   );
 }
@@ -103,64 +174,108 @@ function isOrderDetail(value: unknown): value is OrderDetail {
   if (!isOrderSummary(value)) return false;
   const row = value as unknown as Record<string, unknown>;
   const deliveryValid = row.deliveryDetails === null || isDeliveryDetails(row.deliveryDetails);
-  return deliveryValid && Array.isArray(row.items) && row.items.every(isOrderItemDetail);
+  const itemsValid = Array.isArray(row.items) && row.items.every(isOrderItemDetail);
+  const prescriptionValid =
+    row.prescription === undefined || row.prescription === null || isPrescriptionSummary(row.prescription);
+  return deliveryValid && itemsValid && prescriptionValid;
 }
 
-async function readErrorCode(response: Response): Promise<string> {
-  try {
-    const body: unknown = await response.json();
-    if (body && typeof body === 'object' && 'code' in body && typeof body.code === 'string') {
-      return body.code;
+function extractProductNames(payload: unknown): string[] | undefined {
+  if (!payload || typeof payload !== 'object' || !('productNames' in payload)) return undefined;
+  const raw = (payload as Record<string, unknown>).productNames;
+  if (!Array.isArray(raw)) return undefined;
+  const names = raw.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
+  return names.length > 0 ? names : undefined;
+}
+
+function mapErrorMessage(status: number, code: string, productNames?: readonly string[]): string {
+  if (status === 401) return 'Tu sesión expiró. Vuelve a iniciar sesión para ver tus pedidos.';
+  if (status === 403) return 'Tu cuenta aún no tiene permisos de compra habilitados.';
+  if (status === 404) return 'No encontramos el pedido solicitado.';
+  if (status === 409) {
+    if (code === 'insufficient_stock') {
+      if (productNames && productNames.length > 0) {
+        return `No pudimos confirmar tu solicitud porque se agotó o redujo el stock de: ${productNames.join(', ')}. Actualizamos el catálogo para que ajustes tu carrito.`;
+      }
+      return 'No hay stock suficiente para completar uno de los medicamentos seleccionados. Actualizamos el catálogo para que revises las cantidades.';
     }
-  } catch {
-    // Ignore non-JSON error bodies.
+    if (code === 'unavailable_product') {
+      return 'Uno de los medicamentos seleccionados ya no está disponible para compra en línea.';
+    }
+    if (code === 'expired') {
+      return 'El plazo de reserva de este pedido ya venció. Crea una nueva solicitud desde el catálogo.';
+    }
+    return 'Este pedido ya cambió de estado y no permite realizar esa acción.';
   }
-  return 'request_failed';
+  if (status === 400 || code === 'invalid_input') {
+    return 'El archivo de receta o los datos del pedido no son válidos. Usa un archivo PDF, JPG, PNG o WEBP de hasta 5 MB.';
+  }
+  return 'Ocurrió un problema al consultar tus pedidos. Inténtalo nuevamente.';
 }
 
-function mapStatusMessage(status: number, code: string, fallback: string): string {
-  if (status === 401) return 'Tu sesión expiró. Inicia sesión nuevamente para ver tus pedidos.';
-  if (status === 403) return 'Tu cuenta no tiene permisos habilitados para consultar pedidos.';
-  if (status === 404) return 'No encontramos ese pedido.';
-  if (status === 409 && code === 'expired') {
-    return 'El plazo de reserva de esta solicitud venció. Crea una nueva solicitud desde el catálogo.';
+async function parseJsonOrThrow(response: Response): Promise<unknown> {
+  const payload: unknown = await response.json().catch(() => null);
+  if (!response.ok) {
+    const code =
+      payload && typeof payload === 'object' && 'code' in payload && typeof payload.code === 'string'
+        ? payload.code
+        : 'request_failed';
+    const productNames = extractProductNames(payload);
+    throw new OrdersApiError(response.status, code, mapErrorMessage(response.status, code, productNames), productNames);
   }
-  if (status === 409) return 'El estado actual del pedido ya no permite esta acción.';
-  return fallback;
+  return payload;
+}
+
+export function myPrescriptionDownloadUrl(orderId: string): string {
+  return `/api/orders/${encodeURIComponent(orderId)}/prescription`;
+}
+
+export async function fileToBase64(file: Blob): Promise<string> {
+  const buffer = await file.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 0x8000;
+  let binary = '';
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+  }
+  return btoa(binary);
+}
+
+export async function createPrescriptionOrder(
+  input: CreatePrescriptionOrderInput,
+): Promise<CreatedPrescriptionOrder> {
+  const response = await fetch('/api/orders/prescription', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  const payload = await parseJsonOrThrow(response);
+  if (
+    !isOrderSummary(payload)
+    || !('prescription' in payload)
+    || !isPrescriptionSummary((payload as Record<string, unknown>).prescription)
+  ) {
+    throw new OrdersApiError(500, 'invalid_response', 'La respuesta al registrar el pedido con receta no es válida.');
+  }
+  return payload as CreatedPrescriptionOrder;
 }
 
 export async function listMyOrders(signal?: AbortSignal): Promise<OrderSummary[]> {
   const response = await fetch('/api/orders', signal ? { signal } : undefined);
-  if (!response.ok) {
-    const code = await readErrorCode(response);
-    throw new OrdersApiError(
-      response.status,
-      code,
-      mapStatusMessage(response.status, code, 'No pudimos cargar tus pedidos. Inténtalo de nuevo.'),
-    );
+  const payload = await parseJsonOrThrow(response);
+  if (!Array.isArray(payload) || !payload.every(isOrderSummary)) {
+    throw new OrdersApiError(500, 'invalid_response', 'La respuesta del servidor de pedidos no es válida.');
   }
-  const body: unknown = await response.json();
-  if (!Array.isArray(body) || !body.every(isOrderSummary)) {
-    throw new OrdersApiError(502, 'invalid_response', 'La API devolvió un listado de pedidos inválido.');
-  }
-  return body;
+  return payload;
 }
 
 export async function getMyOrderDetail(orderId: string, signal?: AbortSignal): Promise<OrderDetail> {
   const response = await fetch(`/api/orders/${encodeURIComponent(orderId)}`, signal ? { signal } : undefined);
-  if (!response.ok) {
-    const code = await readErrorCode(response);
-    throw new OrdersApiError(
-      response.status,
-      code,
-      mapStatusMessage(response.status, code, 'No pudimos cargar el detalle del pedido.'),
-    );
+  const payload = await parseJsonOrThrow(response);
+  if (!isOrderDetail(payload)) {
+    throw new OrdersApiError(500, 'invalid_response', 'El detalle del pedido recibido no es válido.');
   }
-  const body: unknown = await response.json();
-  if (!isOrderDetail(body)) {
-    throw new OrdersApiError(502, 'invalid_response', 'La API devolvió un detalle de pedido inválido.');
-  }
-  return body;
+  return payload;
 }
 
 export async function cancelMyOrder(orderId: string, operationId: string): Promise<OrderSummary> {
@@ -169,38 +284,23 @@ export async function cancelMyOrder(orderId: string, operationId: string): Promi
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ operationId }),
   });
-  if (!response.ok) {
-    const code = await readErrorCode(response);
-    throw new OrdersApiError(
-      response.status,
-      code,
-      mapStatusMessage(response.status, code, 'No pudimos cancelar el pedido. Inténtalo de nuevo.'),
-    );
+  const payload = await parseJsonOrThrow(response);
+  if (!isOrderSummary(payload)) {
+    throw new OrdersApiError(500, 'invalid_response', 'La respuesta al cancelar el pedido no es válida.');
   }
-  const body: unknown = await response.json();
-  if (!isOrderSummary(body)) {
-    throw new OrdersApiError(502, 'invalid_response', 'La API devolvió una respuesta inválida al cancelar.');
-  }
-  return body;
+  return payload;
 }
 
+// Temporary direct-confirmation call until Webpay Oneclick authorization replaces this step.
 export async function payMyOrder(orderId: string, operationId: string): Promise<OrderSummary> {
   const response = await fetch(`/api/orders/${encodeURIComponent(orderId)}/pay`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ operationId }),
   });
-  if (!response.ok) {
-    const code = await readErrorCode(response);
-    throw new OrdersApiError(
-      response.status,
-      code,
-      mapStatusMessage(response.status, code, 'No pudimos confirmar el pago del pedido. Inténtalo de nuevo.'),
-    );
+  const payload = await parseJsonOrThrow(response);
+  if (!isOrderSummary(payload)) {
+    throw new OrdersApiError(500, 'invalid_response', 'La respuesta al confirmar el pago no es válida.');
   }
-  const body: unknown = await response.json();
-  if (!isOrderSummary(body)) {
-    throw new OrdersApiError(502, 'invalid_response', 'La API devolvió una respuesta inválida al pagar.');
-  }
-  return body;
+  return payload;
 }

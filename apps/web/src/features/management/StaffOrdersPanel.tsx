@@ -1,12 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
+import type { PrescriptionReviewStatus } from '../orders/orders.api';
 import {
+  approveStaffPrescription,
   createInPersonOrder,
   fulfillStaffOrder,
   getFulfillmentOrderDetail,
   IN_PERSON_PAYMENT_LABELS,
   listFulfillmentOrders,
+  rejectStaffPrescription,
   StaffOrdersApiError,
+  staffPrescriptionDownloadUrl,
 } from './staff-orders.api';
 import type {
   InPersonPaymentMethod,
@@ -28,6 +32,19 @@ interface ManualSaleLine {
 
 const PAYMENT_OPTIONS: readonly InPersonPaymentMethod[] = ['cash', 'card', 'bank_transfer'];
 
+const STATUS_BADGE_LABELS: Record<StaffOrderStatusFilter, string> = {
+  pending_review: 'Por revisar receta',
+  confirmed: 'Pagado · Por entregar',
+  fulfilled: 'Entregado',
+  rejected: 'Receta rechazada',
+};
+
+const PRESCRIPTION_STATUS_LABELS: Record<PrescriptionReviewStatus, string> = {
+  pending: 'Pendiente de revisión',
+  approved: 'Aprobada',
+  rejected: 'Rechazada',
+};
+
 function formatDateTime(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
@@ -42,8 +59,13 @@ function formatClp(amount: string | number | bigint): string {
   return `$${numeric.toLocaleString('es-CL')}`;
 }
 
+function formatFileSize(bytes: number): string {
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
 export function StaffOrdersPanel({ onCatalogChanged }: StaffOrdersPanelProps) {
-  const [statusTab, setStatusTab] = useState<StaffOrderStatusFilter>('confirmed');
+  const [statusTab, setStatusTab] = useState<StaffOrderStatusFilter>('pending_review');
   const [orders, setOrders] = useState<StaffOrderSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshTick, setRefreshTick] = useState(0);
@@ -65,10 +87,15 @@ export function StaffOrdersPanel({ onCatalogChanged }: StaffOrdersPanelProps) {
   const [detailErrors, setDetailErrors] = useState<Record<string, string>>({});
 
   const [confirmFulfillId, setConfirmFulfillId] = useState<string | null>(null);
-  const [fulfillingId, setFulfillingId] = useState<string | null>(null);
+  const [confirmApproveId, setConfirmApproveId] = useState<string | null>(null);
+  const [rejectingFormId, setRejectingFormId] = useState<string | null>(null);
+  const [rejectionReason, setRejectionReason] = useState('');
+  const [busyOrderId, setBusyOrderId] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [statusMessage, setStatusMessage] = useState('');
   const fulfillKeys = useRef<Map<string, string>>(new Map());
+  const approveKeys = useRef<Map<string, string>>(new Map());
+  const rejectKeys = useRef<Map<string, string>>(new Map());
 
   useEffect(() => {
     const controller = new AbortController();
@@ -124,6 +151,9 @@ export function StaffOrdersPanel({ onCatalogChanged }: StaffOrdersPanelProps) {
     setStatusMessage('');
     setExpandedOrderId(null);
     setConfirmFulfillId(null);
+    setConfirmApproveId(null);
+    setRejectingFormId(null);
+    setRejectionReason('');
     setStatusTab(nextTab);
   }
 
@@ -228,8 +258,8 @@ export function StaffOrdersPanel({ onCatalogChanged }: StaffOrdersPanelProps) {
   }
 
   async function handleFulfill(order: StaffOrderSummary) {
-    if (fulfillingId) return;
-    setFulfillingId(order.id);
+    if (busyOrderId) return;
+    setBusyOrderId(order.id);
     setError('');
     setStatusMessage('');
 
@@ -261,7 +291,84 @@ export function StaffOrdersPanel({ onCatalogChanged }: StaffOrdersPanelProps) {
           : 'No pudimos completar la entrega del pedido.',
       );
     } finally {
-      setFulfillingId(null);
+      setBusyOrderId(null);
+    }
+  }
+
+  async function handleApprovePrescription(order: StaffOrderSummary) {
+    if (busyOrderId) return;
+    setBusyOrderId(order.id);
+    setError('');
+    setStatusMessage('');
+
+    let operationId = approveKeys.current.get(order.id);
+    if (!operationId) {
+      operationId = crypto.randomUUID();
+      approveKeys.current.set(order.id, operationId);
+    }
+
+    try {
+      const result = await approveStaffPrescription(order.id, operationId);
+      approveKeys.current.delete(order.id);
+      setOrders((current) => current.filter((item) => item.id !== result.id));
+      setConfirmApproveId(null);
+      setExpandedOrderId((current) => (current === result.id ? null : current));
+      const emailNotice = result.notificationSent
+        ? 'Se envió un correo al vecino con el plazo de 3 días para pagar.'
+        : 'El pedido quedó listo para pago por 3 días (no se pudo enviar notificación por correo).';
+      setStatusMessage(`Receta aprobada para el pedido ${result.orderNumber}. ${emailNotice}`);
+    } catch (failure: unknown) {
+      setError(
+        failure instanceof StaffOrdersApiError
+          ? failure.message
+          : 'No pudimos aprobar la receta del pedido.',
+      );
+    } finally {
+      setBusyOrderId(null);
+    }
+  }
+
+  async function handleRejectPrescription(event: FormEvent<HTMLFormElement>, order: StaffOrderSummary) {
+    event.preventDefault();
+    if (busyOrderId) return;
+    const trimmedReason = rejectionReason.trim();
+    if (!trimmedReason) {
+      setError('Indica un motivo para rechazar la receta.');
+      return;
+    }
+
+    setBusyOrderId(order.id);
+    setError('');
+    setStatusMessage('');
+
+    let operationId = rejectKeys.current.get(order.id);
+    if (!operationId) {
+      operationId = crypto.randomUUID();
+      rejectKeys.current.set(order.id, operationId);
+    }
+
+    try {
+      const result = await rejectStaffPrescription(order.id, operationId, trimmedReason);
+      rejectKeys.current.delete(order.id);
+      setOrders((current) => current.filter((item) => item.id !== result.id));
+      setRejectingFormId(null);
+      setRejectionReason('');
+      setExpandedOrderId((current) => (current === result.id ? null : current));
+      const emailNotice = result.notificationSent
+        ? 'Se notificó el motivo al vecino por correo.'
+        : 'El motivo quedó registrado en Mis pedidos (no se pudo enviar correo).';
+      setStatusMessage(
+        `Receta rechazada para el pedido ${result.orderNumber}. El stock reservado fue liberado. ${emailNotice}`,
+      );
+      onCatalogChanged?.();
+    } catch (failure: unknown) {
+      setError(
+        failure instanceof StaffOrdersApiError
+          ? failure.message
+          : 'No pudimos rechazar la receta del pedido.',
+      );
+    } finally {
+      setBusyOrderId(null);
     }
   }
 
@@ -279,13 +386,20 @@ export function StaffOrdersPanel({ onCatalogChanged }: StaffOrdersPanelProps) {
     );
   });
 
+  const emptyMessageByTab: Record<StaffOrderStatusFilter, string> = {
+    pending_review: 'No hay recetas pendientes de revisión en este momento.',
+    confirmed: 'No hay pedidos pagados pendientes de entrega en este momento.',
+    fulfilled: 'Aún no hay pedidos marcados como entregados.',
+    rejected: 'No hay pedidos con receta rechazada.',
+  };
+
   return (
     <div className="admin-panel-content">
       <div className="admin-section-intro">
         <div>
           <h3 className="admin-subheading">Gestión de pedidos</h3>
           <p className="orders-subtitle">
-            Entrega pedidos pagados en línea, registra ventas presenciales en mesón y consulta el historial de entregados.
+            Revisa recetas adjuntas, entrega pedidos pagados en línea y registra ventas presenciales en mesón.
           </p>
         </div>
         <div className="orders-toolbar-actions">
@@ -449,6 +563,15 @@ export function StaffOrdersPanel({ onCatalogChanged }: StaffOrdersPanelProps) {
           <button
             type="button"
             role="tab"
+            aria-selected={statusTab === 'pending_review'}
+            className={statusTab === 'pending_review' ? 'chip activo' : 'chip'}
+            onClick={() => handleTabChange('pending_review')}
+          >
+            Por revisar (receta)
+          </button>
+          <button
+            type="button"
+            role="tab"
             aria-selected={statusTab === 'confirmed'}
             className={statusTab === 'confirmed' ? 'chip activo' : 'chip'}
             onClick={() => handleTabChange('confirmed')}
@@ -463,6 +586,15 @@ export function StaffOrdersPanel({ onCatalogChanged }: StaffOrdersPanelProps) {
             onClick={() => handleTabChange('fulfilled')}
           >
             Entregados
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={statusTab === 'rejected'}
+            className={statusTab === 'rejected' ? 'chip activo' : 'chip'}
+            onClick={() => handleTabChange('rejected')}
+          >
+            Rechazados
           </button>
         </div>
 
@@ -491,11 +623,7 @@ export function StaffOrdersPanel({ onCatalogChanged }: StaffOrdersPanelProps) {
       {loading && orders.length === 0 ? (
         <p className="orders-empty" role="status">Cargando pedidos…</p>
       ) : filteredOrders.length === 0 ? (
-        <p className="orders-empty">
-          {statusTab === 'confirmed'
-            ? 'No hay pedidos pagados pendientes de entrega en este momento.'
-            : 'Aún no hay pedidos marcados como entregados.'}
-        </p>
+        <p className="orders-empty">{emptyMessageByTab[statusTab]}</p>
       ) : (
         <ul className="orders-list">
           {filteredOrders.map((order) => {
@@ -503,9 +631,16 @@ export function StaffOrdersPanel({ onCatalogChanged }: StaffOrdersPanelProps) {
             const detail = detailsById[order.id];
             const isLoadingDetail = detailLoadingId === order.id;
             const orderDetailError = detailErrors[order.id];
-            const isConfirming = confirmFulfillId === order.id;
-            const isFulfilling = fulfillingId === order.id;
+            const isConfirmingFulfill = confirmFulfillId === order.id;
+            const isConfirmingApprove = confirmApproveId === order.id;
+            const isRejectingForm = rejectingFormId === order.id;
+            const isBusy = busyOrderId === order.id;
             const isDelivery = order.fulfillmentMethod === 'delivery';
+            const badgeLabel = STATUS_BADGE_LABELS[
+              order.status === 'pending_review' || order.status === 'confirmed' || order.status === 'fulfilled' || order.status === 'rejected'
+                ? order.status
+                : statusTab
+            ];
 
             return (
               <li key={order.id} className="order-card">
@@ -515,7 +650,7 @@ export function StaffOrdersPanel({ onCatalogChanged }: StaffOrdersPanelProps) {
                     <span className="order-date"> · {formatDateTime(order.createdAt)}</span>
                   </div>
                   <span className={`order-status-badge status-${order.status}`}>
-                    {order.status === 'confirmed' ? 'Pagado · Por entregar' : 'Entregado'}
+                    {badgeLabel}
                   </span>
                 </div>
 
@@ -544,11 +679,53 @@ export function StaffOrdersPanel({ onCatalogChanged }: StaffOrdersPanelProps) {
                     {isExpanded ? 'Ocultar detalle' : 'Ver detalle'}
                   </button>
 
-                  {order.status === 'confirmed' && !isConfirming && (
+                  {order.status === 'pending_review' && (
+                    <>
+                      <a
+                        href={staffPrescriptionDownloadUrl(order.id)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="btn-secundario btn-link-receta"
+                      >
+                        Ver receta
+                      </a>
+                      {!isConfirmingApprove && !isRejectingForm && (
+                        <>
+                          <button
+                            type="button"
+                            className="btn-agregar"
+                            disabled={Boolean(busyOrderId)}
+                            onClick={() => {
+                              setConfirmApproveId(order.id);
+                              setRejectingFormId(null);
+                              setError('');
+                            }}
+                          >
+                            Aprobar receta
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-peligro-suave"
+                            disabled={Boolean(busyOrderId)}
+                            onClick={() => {
+                              setRejectingFormId(order.id);
+                              setConfirmApproveId(null);
+                              setRejectionReason('');
+                              setError('');
+                            }}
+                          >
+                            Rechazar receta
+                          </button>
+                        </>
+                      )}
+                    </>
+                  )}
+
+                  {order.status === 'confirmed' && !isConfirmingFulfill && (
                     <button
                       type="button"
                       className="btn-agregar"
-                      disabled={Boolean(fulfillingId)}
+                      disabled={Boolean(busyOrderId)}
                       onClick={() => setConfirmFulfillId(order.id)}
                     >
                       {isDelivery ? 'Marcar como despachado' : 'Marcar como entregado'}
@@ -556,7 +733,74 @@ export function StaffOrdersPanel({ onCatalogChanged }: StaffOrdersPanelProps) {
                   )}
                 </div>
 
-                {isConfirming && (
+                {isConfirmingApprove && (
+                  <div className="staff-approve-confirm" role="region" aria-label="Confirmar aprobación de receta">
+                    <p>
+                      ¿Aprobar la receta del pedido <strong>{order.orderNumber}</strong>? El pedido pasará a{' '}
+                      <strong>Pendiente de pago</strong> con plazo de 3 días y se enviará un correo al vecino.
+                    </p>
+                    <div className="order-cancel-confirm-actions">
+                      <button
+                        type="button"
+                        className="btn-agregar"
+                        disabled={isBusy}
+                        onClick={() => void handleApprovePrescription(order)}
+                      >
+                        {isBusy ? 'Aprobando…' : 'Sí, aprobar receta'}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-secundario"
+                        disabled={isBusy}
+                        onClick={() => setConfirmApproveId(null)}
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {isRejectingForm && (
+                  <form
+                    className="staff-reject-form"
+                    onSubmit={(event) => void handleRejectPrescription(event, order)}
+                  >
+                    <label htmlFor={`reject-reason-${order.id}`}>
+                      Motivo del rechazo para el pedido {order.orderNumber} *
+                    </label>
+                    <textarea
+                      id={`reject-reason-${order.id}`}
+                      className="staff-reject-textarea"
+                      maxLength={500}
+                      placeholder="Ej.: Receta ilegible, vencida o no corresponde al medicamento solicitado."
+                      disabled={isBusy}
+                      value={rejectionReason}
+                      onChange={(event) => setRejectionReason(event.target.value)}
+                    />
+                    <div className="order-cancel-confirm-actions">
+                      <button
+                        type="submit"
+                        className="btn-peligro"
+                        disabled={isBusy || !rejectionReason.trim()}
+                      >
+                        {isBusy ? 'Rechazando…' : 'Confirmar rechazo y liberar stock'}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-secundario"
+                        disabled={isBusy}
+                        onClick={() => {
+                          setRejectingFormId(null);
+                          setRejectionReason('');
+                        }}
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                {isConfirmingFulfill && (
                   <div className="order-cancel-confirm" role="region" aria-label="Confirmar entrega">
                     <p>
                       ¿Confirmar que el pedido <strong>{order.orderNumber}</strong> fue{' '}
@@ -566,15 +810,15 @@ export function StaffOrdersPanel({ onCatalogChanged }: StaffOrdersPanelProps) {
                       <button
                         type="button"
                         className="btn-agregar"
-                        disabled={isFulfilling}
+                        disabled={isBusy}
                         onClick={() => void handleFulfill(order)}
                       >
-                        {isFulfilling ? 'Registrando…' : 'Sí, confirmar entrega'}
+                        {isBusy ? 'Registrando…' : 'Sí, confirmar entrega'}
                       </button>
                       <button
                         type="button"
                         className="btn-secundario"
-                        disabled={isFulfilling}
+                        disabled={isBusy}
                         onClick={() => setConfirmFulfillId(null)}
                       >
                         Cancelar
@@ -605,6 +849,34 @@ export function StaffOrdersPanel({ onCatalogChanged }: StaffOrdersPanelProps) {
                             </li>
                           ))}
                         </ul>
+
+                        {detail.prescription && (
+                          <div className="order-prescription-box">
+                            <h4 className="order-detail-heading">Receta médica adjunta</h4>
+                            <div className="order-prescription-row">
+                              <div>
+                                <strong>{detail.prescription.fileName}</strong>
+                                <span className="order-item-sub">
+                                  {formatFileSize(detail.prescription.fileSizeBytes)} ·{' '}
+                                  {PRESCRIPTION_STATUS_LABELS[detail.prescription.status]}
+                                </span>
+                              </div>
+                              <a
+                                href={staffPrescriptionDownloadUrl(order.id)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="btn-secundario btn-link-receta"
+                              >
+                                Abrir receta adjunta
+                              </a>
+                            </div>
+                            {detail.prescription.rejectionReason && (
+                              <div className="receta-rejection-box" role="alert">
+                                <strong>Motivo del rechazo:</strong> {detail.prescription.rejectionReason}
+                              </div>
+                            )}
+                          </div>
+                        )}
 
                         {detail.deliveryDetails && (
                           <div className="order-delivery-info">

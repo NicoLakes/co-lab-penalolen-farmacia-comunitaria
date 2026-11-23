@@ -2,7 +2,7 @@
 FROM node:24-bookworm-slim
 RUN npm install --global pnpm@11.1.2
 WORKDIR /workspace
-RUN chown node:node /workspace
+RUN chown node:node /workspace && mkdir -p /var/lib/farmacia/prescriptions && chown node:node /var/lib/farmacia/prescriptions
 USER node
 
 COPY --chown=node:node package.json pnpm-lock.yaml pnpm-workspace.yaml ./

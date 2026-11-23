@@ -210,7 +210,7 @@ test('a fresh migration chain creates catalog and operational inventory without 
   const namespace = `catalog_migration_${randomUUID().replaceAll('-', '')}`;
   const migrationFiles = [
     '0000_initial_catalog.sql', '0001_commercial_catalog.sql', '0002_operational_inventory.sql',
-    '0003_orders_and_reservations.sql', '0004_authentication.sql',
+    '0003_orders_and_reservations.sql', '0004_authentication.sql', '0005_prescription_review.sql',
   ];
   const migrations = await Promise.all(migrationFiles.map((filename) =>
     readFile(new URL(`../../migrations/${filename}`, import.meta.url), 'utf8')));

@@ -12,6 +12,7 @@ export interface Medicamento {
   precio: number;
   stock: number;
   requiereReceta: boolean;
+  condicionVenta?: string | undefined;
 }
 
 export interface ItemCarrito {

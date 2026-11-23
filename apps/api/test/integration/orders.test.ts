@@ -199,6 +199,7 @@ test('orders preserve stock, audit history and purchase details through their li
     const paid = await createOrder(db, customer.id, pickup(item.id), settings);
     await confirmOrderPayment(db, paid.id, paid.totalClp, operation());
     const unpaid = await createOrder(db, customer.id, pickup(item.id), settings);
+    assert.ok(unpaid.reservationExpiresAt);
     await db.execute(sql`SELECT pg_sleep(greatest(0, extract(epoch FROM (${unpaid.reservationExpiresAt.toISOString()}::timestamptz - clock_timestamp()))) + 0.05)`);
     await assert.rejects(confirmOrderPayment(db, unpaid.id, unpaid.totalClp, operation()), hasCode('expired'));
     const released = await Promise.all([expirePendingOrders(db), expirePendingOrders(db)]);

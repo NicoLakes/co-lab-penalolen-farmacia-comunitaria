@@ -1,5 +1,14 @@
 import { useRef, useState } from 'react';
-import { OrdersApiError, payMyOrder } from '../orders/orders.api';
+import type { ChangeEvent } from 'react';
+import {
+  ALLOWED_PRESCRIPTION_MIME_TYPES,
+  createPrescriptionOrder,
+  fileToBase64,
+  MAX_PRESCRIPTION_BYTES,
+  OrdersApiError,
+  payMyOrder,
+} from '../orders/orders.api';
+import type { AllowedPrescriptionMimeType } from '../orders/orders.api';
 import type { Medicamento } from './medicamentos.mock';
 
 export interface ItemCarrito {
@@ -10,8 +19,14 @@ export interface ItemCarrito {
 interface ResumenPedidoCreado {
   id: string;
   orderNumber: string;
+  status: 'pending_review' | 'pending_payment';
   totalClp: string;
   fulfillmentMethod: 'pickup' | 'delivery';
+}
+
+interface SelectedPrescriptionFile {
+  file: File;
+  mimeType: AllowedPrescriptionMimeType;
 }
 
 interface CarritoPanelProps {
@@ -21,9 +36,29 @@ interface CarritoPanelProps {
   deliveryFeeClp: number | null;
   onCerrar: () => void;
   onCambiarCantidad: (codigo: string, nuevaCantidad: number) => void;
-  onPedidoCreado?: () => void;
-  onSolicitarInicioSesion?: () => void;
-  onVerMisPedidos?: () => void;
+  onPedidoCreado?: (() => void) | undefined;
+  onStockAgotado?: (() => void) | undefined;
+  onSolicitarInicioSesion?: (() => void) | undefined;
+  onVerMisPedidos?: (() => void) | undefined;
+}
+
+function resolvePrescriptionMimeType(file: File): AllowedPrescriptionMimeType | null {
+  const declared = file.type.trim().toLowerCase();
+  if (declared === 'image/jpg') return 'image/jpeg';
+  const exact = ALLOWED_PRESCRIPTION_MIME_TYPES.find((candidate) => candidate === declared);
+  if (exact) return exact;
+
+  const lowerName = file.name.trim().toLowerCase();
+  if (lowerName.endsWith('.pdf')) return 'application/pdf';
+  if (lowerName.endsWith('.jpg') || lowerName.endsWith('.jpeg')) return 'image/jpeg';
+  if (lowerName.endsWith('.png')) return 'image/png';
+  if (lowerName.endsWith('.webp')) return 'image/webp';
+  return null;
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
 }
 
 export function CarritoPanel({
@@ -34,6 +69,7 @@ export function CarritoPanel({
   onCerrar,
   onCambiarCantidad,
   onPedidoCreado,
+  onStockAgotado,
   onSolicitarInicioSesion,
   onVerMisPedidos,
 }: CarritoPanelProps) {
@@ -42,6 +78,10 @@ export function CarritoPanel({
   const [telefono, setTelefono] = useState('');
   const [direccion, setDireccion] = useState('');
   const [comuna, setComuna] = useState('Peñalolén');
+  const [archivoReceta, setArchivoReceta] = useState<SelectedPrescriptionFile | null>(null);
+  const [errorRecetaArchivo, setErrorRecetaArchivo] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const [enviando, setEnviando] = useState(false);
   const [errorPedido, setErrorPedido] = useState('');
   const [requiereInicioSesion, setRequiereInicioSesion] = useState(false);
@@ -59,11 +99,49 @@ export function CarritoPanel({
     0n,
   );
   const totalPrecio = subtotalPrecio + BigInt(metodoEntrega === 'delivery' ? deliveryFeeClp ?? 0 : 0);
+  const carritoTieneRecetaCheque = carrito.some((item) => item.medicamento.condicionVenta === 'prescription_cheque');
   const carritoRequiereReceta = carrito.some((item) => item.medicamento.requiereReceta);
+  const faltaAdjuntarReceta = carritoRequiereReceta && !carritoTieneRecetaCheque && !archivoReceta;
   const catalogoDisponible = deliveryFeeClp !== null && carrito.every(({ medicamento }) => medicamento.id);
 
+  function handleSelectPrescriptionFile(event: ChangeEvent<HTMLInputElement>) {
+    setErrorRecetaArchivo('');
+    setErrorPedido('');
+    const file = event.target.files?.[0];
+    if (!file) {
+      setArchivoReceta(null);
+      return;
+    }
+    if (file.size <= 0) {
+      setArchivoReceta(null);
+      setErrorRecetaArchivo('El archivo seleccionado está vacío.');
+      event.target.value = '';
+      return;
+    }
+    if (file.size > MAX_PRESCRIPTION_BYTES) {
+      setArchivoReceta(null);
+      setErrorRecetaArchivo('El archivo supera el límite máximo de 5 MB.');
+      event.target.value = '';
+      return;
+    }
+    const mimeType = resolvePrescriptionMimeType(file);
+    if (!mimeType) {
+      setArchivoReceta(null);
+      setErrorRecetaArchivo('Formato no compatible. Adjunta un PDF o imagen JPG, PNG o WEBP.');
+      event.target.value = '';
+      return;
+    }
+    setArchivoReceta({ file, mimeType });
+  }
+
+  function clearPrescriptionFile() {
+    setArchivoReceta(null);
+    setErrorRecetaArchivo('');
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  }
+
   async function confirmarSolicitud() {
-    if (enviando || carritoRequiereReceta || !catalogoDisponible) return;
+    if (enviando || carritoTieneRecetaCheque || faltaAdjuntarReceta || !catalogoDisponible) return;
     setErrorPedido('');
     setRequiereInicioSesion(false);
     setPedidoExitoso(null);
@@ -84,20 +162,61 @@ export function CarritoPanel({
 
     setEnviando(true);
     try {
-      const order = {
-        items: carrito.map(({ medicamento, cantidad }) => ({ productId: medicamento.id, quantity: cantidad })),
-        fulfillment: metodoEntrega === 'pickup'
-          ? { method: 'pickup' }
-          : {
-              method: 'delivery',
-              details: {
-                recipientName: nombreReceptor.trim(),
-                phone: telefono.trim(),
-                address: direccion.trim(),
-                commune: comuna.trim(),
-              },
+      const items = carrito.map(({ medicamento, cantidad }) => ({
+        productId: medicamento.id as string,
+        quantity: cantidad,
+      }));
+      const fulfillment = metodoEntrega === 'pickup'
+        ? { method: 'pickup' as const }
+        : {
+            method: 'delivery' as const,
+            details: {
+              recipientName: nombreReceptor.trim(),
+              phone: telefono.trim(),
+              address: direccion.trim(),
+              commune: comuna.trim(),
             },
-      };
+          };
+
+      if (carritoRequiereReceta && archivoReceta) {
+        const requestSignature = JSON.stringify({
+          mode: 'prescription',
+          items,
+          fulfillment,
+          file: {
+            name: archivoReceta.file.name,
+            size: archivoReceta.file.size,
+            lastModified: archivoReceta.file.lastModified,
+          },
+        });
+        if (lastSubmission.current?.request !== requestSignature || lastSubmission.current.account !== usuarioEmail) {
+          lastSubmission.current = { request: requestSignature, account: usuarioEmail, key: crypto.randomUUID() };
+        }
+        const contentBase64 = await fileToBase64(archivoReceta.file);
+        const created = await createPrescriptionOrder({
+          idempotencyKey: lastSubmission.current.key,
+          items,
+          fulfillment,
+          prescription: {
+            fileName: archivoReceta.file.name,
+            mimeType: archivoReceta.mimeType,
+            contentBase64,
+          },
+        });
+        setPedidoExitoso({
+          id: created.id,
+          orderNumber: created.orderNumber,
+          status: 'pending_review',
+          totalClp: created.totalClp,
+          fulfillmentMethod: created.fulfillmentMethod,
+        });
+        lastSubmission.current = null;
+        clearPrescriptionFile();
+        onPedidoCreado?.();
+        return;
+      }
+
+      const order = { items, fulfillment };
       const request = JSON.stringify(order);
       if (lastSubmission.current?.request !== request || lastSubmission.current.account !== usuarioEmail) {
         lastSubmission.current = { request, account: usuarioEmail, key: crypto.randomUUID() };
@@ -124,27 +243,52 @@ export function CarritoPanel({
         || !('totalClp' in datos) || typeof datos.totalClp !== 'string' || !/^\d{1,19}$/.test(datos.totalClp)
         || !('fulfillmentMethod' in datos) || (datos.fulfillmentMethod !== 'pickup' && datos.fulfillmentMethod !== 'delivery')) {
         const codigoError = datos && typeof datos === 'object' && 'code' in datos ? String(datos.code) : '';
+        const nombresSinStock =
+          datos && typeof datos === 'object' && 'productNames' in datos && Array.isArray(datos.productNames)
+            ? datos.productNames.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+            : [];
+        if (codigoError === 'insufficient_stock') {
+          setErrorPedido(
+            nombresSinStock.length > 0
+              ? `No pudimos confirmar tu solicitud porque se agotó o redujo el stock de: ${nombresSinStock.join(', ')}. Actualizamos el catálogo para que ajustes las cantidades.`
+              : 'No hay stock suficiente para completar uno de los medicamentos seleccionados. Actualizamos el catálogo para que revises las cantidades.',
+          );
+          onStockAgotado?.();
+          return;
+        }
         setErrorPedido(
-          codigoError === 'insufficient_stock'
-            ? 'No hay stock suficiente para completar uno de los medicamentos seleccionados.'
+          codigoError === 'unavailable_product'
+            ? 'Uno de los medicamentos ya no está disponible para compra en línea.'
             : 'No pudimos registrar la solicitud en la base de datos. Inténtalo de nuevo.',
         );
         return;
       }
 
       const { id, orderNumber, totalClp, fulfillmentMethod } = datos;
-      setPedidoExitoso({ id, orderNumber, totalClp, fulfillmentMethod });
+      setPedidoExitoso({ id, orderNumber, status: 'pending_payment', totalClp, fulfillmentMethod });
       lastSubmission.current = null;
       onPedidoCreado?.();
-    } catch {
-      setErrorPedido('Error de conexión al registrar tu pedido.');
+    } catch (failure: unknown) {
+      if (failure instanceof OrdersApiError) {
+        if (failure.status === 401) {
+          setRequiereInicioSesion(true);
+          requestAnimationFrame(() => alertaRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }));
+          return;
+        }
+        setErrorPedido(failure.message);
+        if (failure.code === 'insufficient_stock') {
+          onStockAgotado?.();
+        }
+      } else {
+        setErrorPedido('Error de conexión al registrar tu pedido.');
+      }
     } finally {
       setEnviando(false);
     }
   }
 
   async function pagarPedidoReciente() {
-    if (!pedidoExitoso || pagandoExito || pedidoPagado) return;
+    if (!pedidoExitoso || pedidoExitoso.status !== 'pending_payment' || pagandoExito || pedidoPagado) return;
     setPagandoExito(true);
     setErrorPagoExito('');
     if (!payKeyRef.current) payKeyRef.current = crypto.randomUUID();
@@ -184,21 +328,29 @@ export function CarritoPanel({
 
         {pedidoExitoso && (
           <div className="alerta-pedido-exito" role="status">
-            <strong>{pedidoPagado ? 'Pago confirmado' : 'Solicitud registrada'}</strong>
+            <strong>
+              {pedidoExitoso.status === 'pending_review'
+                ? 'Solicitud enviada a revisión de receta'
+                : pedidoPagado
+                  ? 'Pago confirmado'
+                  : 'Solicitud registrada'}
+            </strong>
             <p>
               Número de orden: <strong>{pedidoExitoso.orderNumber}</strong> · Total:{' '}
               <strong>${BigInt(pedidoExitoso.totalClp).toLocaleString('es-CL')}</strong>
             </p>
             <p>
-              {pedidoPagado
-                ? 'Tu pedido ya pasó a la farmacia para preparación y entrega.'
-                : `Stock reservado para ${pedidoExitoso.fulfillmentMethod === 'pickup' ? 'retiro en farmacia' : 'despacho a domicilio'}.`}
+              {pedidoExitoso.status === 'pending_review'
+                ? 'Tu stock ya quedó reservado mientras la farmacia revisa tu receta. Te avisaremos por correo cuando sea aprobada para que puedas pagar.'
+                : pedidoPagado
+                  ? 'Tu pedido ya pasó a la farmacia para preparación y entrega.'
+                  : `Stock reservado por 15 minutos para ${pedidoExitoso.fulfillmentMethod === 'pickup' ? 'retiro en farmacia' : 'despacho a domicilio'}.`}
             </p>
             {errorPagoExito && (
               <p className="carrito-alerta-error" role="alert">{errorPagoExito}</p>
             )}
             <div className="alerta-exito-actions">
-              {!pedidoPagado && (
+              {pedidoExitoso.status === 'pending_payment' && !pedidoPagado && (
                 <button
                   type="button"
                   className="btn-agregar"
@@ -232,7 +384,11 @@ export function CarritoPanel({
                     <strong>{medicamento.principioActivo}</strong>
                     <span>
                       ${medicamento.precio.toLocaleString('es-CL')} c/u
-                      {medicamento.requiereReceta ? ' · Requiere receta' : ' · Venta directa'}
+                      {medicamento.condicionVenta === 'prescription_cheque'
+                        ? ' · Receta cheque (solo presencial)'
+                        : medicamento.requiereReceta
+                          ? ' · Requiere receta'
+                          : ' · Venta directa'}
                     </span>
                   </div>
 
@@ -249,7 +405,7 @@ export function CarritoPanel({
                     <button
                       type="button"
                       className="btn-cantidad"
-                      disabled={enviando}
+                      disabled={enviando || cantidad >= medicamento.stock}
                       onClick={() => onCambiarCantidad(medicamento.codigo, cantidad + 1)}
                     >
                       +
@@ -259,13 +415,50 @@ export function CarritoPanel({
               ))}
             </ul>
 
-            {carritoRequiereReceta && (
-              <div className="alerta-receta-isp">
-                Los medicamentos con receta requieren revisión de la farmacia. La compra en línea de estos productos aún no está disponible.
+            {carritoTieneRecetaCheque && (
+              <div className="alerta-receta-isp" role="alert">
+                Este carrito incluye un medicamento con <strong>receta cheque</strong>, que por normativa sanitaria (DS 466) solo puede adquirirse de forma presencial en la farmacia. Quítalo del carrito para continuar.
               </div>
             )}
 
-            {catalogoDisponible && !carritoRequiereReceta && (
+            {catalogoDisponible && carritoRequiereReceta && !carritoTieneRecetaCheque && (
+              <div className="carrito-receta-box">
+                <strong>Adjuntar receta médica (obligatorio)</strong>
+                <p className="carrito-receta-ayuda">
+                  Sube tu receta en <strong>PDF, JPG, PNG o WEBP</strong> (máx. 5 MB). Se adjunta una receta por pedido; si tienes más de un medicamento con receta, puedes subir una foto donde aparezcan o un PDF con todas las hojas.
+                </p>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  className="carrito-receta-input"
+                  aria-label="Adjuntar archivo de receta médica"
+                  accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp"
+                  disabled={enviando}
+                  onChange={handleSelectPrescriptionFile}
+                />
+                {archivoReceta && (
+                  <div className="receta-file-pill">
+                    <div className="receta-file-meta">
+                      <strong>{archivoReceta.file.name}</strong>
+                      <span className="receta-file-size">{formatFileSize(archivoReceta.file.size)}</span>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn-peligro-suave"
+                      disabled={enviando}
+                      onClick={clearPrescriptionFile}
+                    >
+                      Quitar archivo
+                    </button>
+                  </div>
+                )}
+                {errorRecetaArchivo && (
+                  <p className="carrito-alerta-error" role="alert">{errorRecetaArchivo}</p>
+                )}
+              </div>
+            )}
+
+            {catalogoDisponible && !carritoTieneRecetaCheque && (
               <div className="carrito-entrega-box">
                 <strong>Modalidad de entrega:</strong>
                 <div className="entrega-opciones">
@@ -364,10 +557,16 @@ export function CarritoPanel({
               <button
                 type="button"
                 className="btn-continuar-checkout"
-                disabled={enviando || carritoRequiereReceta || !catalogoDisponible}
+                disabled={enviando || carritoTieneRecetaCheque || faltaAdjuntarReceta || !catalogoDisponible}
                 onClick={() => void confirmarSolicitud()}
               >
-                {enviando ? 'Registrando Solicitud…' : 'Confirmar Solicitud de Compra'}
+                {enviando
+                  ? 'Registrando solicitud…'
+                  : carritoRequiereReceta
+                    ? faltaAdjuntarReceta
+                      ? 'Adjunta tu receta para confirmar'
+                      : 'Enviar solicitud a revisión'
+                    : 'Confirmar Solicitud de Compra'}
               </button>
             </div>
           </>

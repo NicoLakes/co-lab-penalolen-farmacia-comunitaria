@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict';
 import { afterEach, mock, test } from 'node:test';
 import {
+  approveStaffPrescription,
+  createInPersonOrder,
   fulfillStaffOrder,
   getFulfillmentOrderDetail,
   listFulfillmentOrders,
+  rejectStaffPrescription,
   StaffOrdersApiError,
 } from '../src/features/management/staff-orders.api.js';
 
@@ -20,16 +23,30 @@ const sampleOrder = {
   buyerEmail: 'vecino@penalolen.local',
 };
 
-test('listFulfillmentOrders queries by status and validates buyerEmail', async () => {
-  const fetchMock = mock.method(globalThis, 'fetch', async () => Response.json([sampleOrder]));
-  const result = await listFulfillmentOrders('confirmed');
-  assert.equal(fetchMock.mock.calls[0]?.arguments[0], '/api/fulfillment/orders?status=confirmed');
-  assert.deepEqual(result, [sampleOrder]);
+const samplePrescription = {
+  id: '66666666-6666-4666-8666-666666666666',
+  fileName: 'receta.pdf',
+  mimeType: 'application/pdf',
+  fileSizeBytes: 8192,
+  status: 'pending' as const,
+  reviewedAt: null,
+  rejectionReason: null,
+  createdAt: '2026-11-22T03:45:00.000Z',
+};
+
+test('listFulfillmentOrders queries by status including pending_review with null deadline', async () => {
+  const pendingReview = { ...sampleOrder, status: 'pending_review' as const, reservationExpiresAt: null };
+  const fetchMock = mock.method(globalThis, 'fetch', async () => Response.json([pendingReview]));
+  const result = await listFulfillmentOrders('pending_review');
+  assert.equal(fetchMock.mock.calls[0]?.arguments[0], '/api/fulfillment/orders?status=pending_review');
+  assert.deepEqual(result, [pendingReview]);
 });
 
-test('getFulfillmentOrderDetail returns validated items and delivery details', async () => {
+test('getFulfillmentOrderDetail returns validated items, delivery details and prescription', async () => {
   const detailPayload = {
     ...sampleOrder,
+    status: 'pending_review' as const,
+    reservationExpiresAt: null,
     fulfillmentMethod: 'delivery' as const,
     deliveryDetails: {
       recipientName: 'Carlos Díaz',
@@ -46,10 +63,49 @@ test('getFulfillmentOrderDetail returns validated items and delivery details', a
         unitPriceClp: 990,
       },
     ],
+    prescription: samplePrescription,
   };
   mock.method(globalThis, 'fetch', async () => Response.json(detailPayload));
   const detail = await getFulfillmentOrderDetail(sampleOrder.id);
   assert.deepEqual(detail, detailPayload);
+});
+
+test('approveStaffPrescription and rejectStaffPrescription post review transitions', async () => {
+  const approveOp = '88888888-8888-4888-8888-888888888888';
+  const approveMock = mock.method(globalThis, 'fetch', async () =>
+    Response.json({
+      ...sampleOrder,
+      status: 'pending_payment',
+      prescription: { ...samplePrescription, status: 'approved', reviewedAt: '2026-11-22T05:00:00.000Z' },
+      notificationSent: true,
+    }),
+  );
+  const approved = await approveStaffPrescription(sampleOrder.id, approveOp);
+  assert.equal(approveMock.mock.calls[0]?.arguments[0], `/api/fulfillment/orders/${sampleOrder.id}/approve-prescription`);
+  assert.equal(approved.status, 'pending_payment');
+  assert.equal(approved.notificationSent, true);
+
+  mock.restoreAll();
+  const rejectOp = '99999999-9999-4999-8999-999999999999';
+  const rejectMock = mock.method(globalThis, 'fetch', async () =>
+    Response.json({
+      ...sampleOrder,
+      status: 'rejected',
+      reservationExpiresAt: null,
+      prescription: {
+        ...samplePrescription,
+        status: 'rejected',
+        reviewedAt: '2026-11-22T05:05:00.000Z',
+        rejectionReason: 'Receta vencida',
+      },
+      notificationSent: true,
+    }),
+  );
+  const rejected = await rejectStaffPrescription(sampleOrder.id, rejectOp, 'Receta vencida');
+  assert.equal(rejectMock.mock.calls[0]?.arguments[0], `/api/fulfillment/orders/${sampleOrder.id}/reject-prescription`);
+  assert.equal(rejectMock.mock.calls[0]?.arguments[1]?.body, JSON.stringify({ operationId: rejectOp, reason: 'Receta vencida' }));
+  assert.equal(rejected.status, 'rejected');
+  assert.equal(rejected.prescription.rejectionReason, 'Receta vencida');
 });
 
 test('fulfillStaffOrder posts operationId and surfaces 409 errors', async () => {
@@ -76,7 +132,6 @@ test('fulfillStaffOrder posts operationId and surfaces 409 errors', async () => 
 });
 
 test('createInPersonOrder posts walk-in sale and handles insufficient_stock 409', async () => {
-  const { createInPersonOrder } = await import('../src/features/management/staff-orders.api.js');
   const idempotencyKey = '55555555-5555-4555-8555-555555555555';
   const fetchMock = mock.method(globalThis, 'fetch', async () =>
     Response.json({ ...sampleOrder, status: 'fulfilled', buyerEmail: null }, { status: 201 }),

@@ -1,4 +1,4 @@
-import { maxInteger, orderUuid } from '../orders/order-input.js';
+import { defaultPrescriptionPaymentSeconds, maxInteger, orderUuid } from '../orders/order-input.js';
 
 export function readAuthConfig(env: NodeJS.ProcessEnv = process.env) {
   const secret = env.BETTER_AUTH_SECRET;
@@ -9,8 +9,13 @@ export function readAuthConfig(env: NodeJS.ProcessEnv = process.env) {
   const pass = env.SMTP_PASSWORD;
   const rawLocations = env.ORDER_LOCATION_IDS;
   const rawDuration = env.ORDER_RESERVATION_SECONDS;
+  const rawPrescriptionDuration = env.ORDER_PRESCRIPTION_PAYMENT_SECONDS;
   const rawFee = env.ORDER_DELIVERY_FEE_CLP;
-  if (![secret, baseUrl, host, from, user, pass, env.SMTP_PORT, rawLocations, rawDuration, rawFee].some(Boolean)) return;
+  const rawStorageDir = env.PRESCRIPTION_STORAGE_DIR;
+  if (![
+    secret, baseUrl, host, from, user, pass, env.SMTP_PORT,
+    rawLocations, rawDuration, rawPrescriptionDuration, rawFee,
+  ].some(Boolean)) return;
 
   if (!secret || secret.length < 32 || !host || !from || /[\r\n]/.test(from) || Boolean(user) !== Boolean(pass)) {
     throw new Error('Set BETTER_AUTH_SECRET, SMTP_HOST and SMTP_FROM. SMTP credentials must be configured together.');
@@ -24,19 +29,28 @@ export function readAuthConfig(env: NodeJS.ProcessEnv = process.env) {
   const port = Number(env.SMTP_PORT || 587);
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('SMTP_PORT is invalid.');
 
+  const prescriptionStorageDir = rawStorageDir?.trim() || '/var/lib/farmacia/prescriptions';
+  if (/[\0\r\n]/.test(prescriptionStorageDir)) {
+    throw new Error('PRESCRIPTION_STORAGE_DIR is invalid.');
+  }
+
   let orderPolicy;
-  if (rawLocations || rawDuration || rawFee) {
+  if (rawLocations || rawDuration || rawFee || rawPrescriptionDuration) {
     const locationIds = (rawLocations ?? '').split(',').map((value) => orderUuid(value.trim()));
     const reservationSeconds = Number(rawDuration);
+    const prescriptionPaymentSeconds = rawPrescriptionDuration
+      ? Number(rawPrescriptionDuration)
+      : defaultPrescriptionPaymentSeconds;
     const deliveryFeeClp = Number(rawFee || 0);
     if (!Number.isInteger(reservationSeconds) || reservationSeconds < 1 || reservationSeconds > maxInteger
+      || !Number.isInteger(prescriptionPaymentSeconds) || prescriptionPaymentSeconds < 1 || prescriptionPaymentSeconds > maxInteger
       || !Number.isInteger(deliveryFeeClp) || deliveryFeeClp < 0 || deliveryFeeClp > maxInteger) {
-      throw new Error('Configure a valid ORDER_RESERVATION_SECONDS and ORDER_DELIVERY_FEE_CLP.');
+      throw new Error('Configure valid ORDER_RESERVATION_SECONDS, ORDER_PRESCRIPTION_PAYMENT_SECONDS and ORDER_DELIVERY_FEE_CLP.');
     }
-    orderPolicy = { locationIds, reservationSeconds, deliveryFeeClp };
+    orderPolicy = { locationIds, reservationSeconds, prescriptionPaymentSeconds, deliveryFeeClp };
   }
   return {
-    origin: url.origin, secret, from, orderPolicy,
+    origin: url.origin, secret, from, orderPolicy, prescriptionStorageDir,
     smtp: {
       host, port, secure: port === 465, requireTLS: url.protocol === 'https:' || Boolean(user),
       ...(user && pass && { auth: { user, pass } }),

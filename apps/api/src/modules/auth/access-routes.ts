@@ -5,6 +5,8 @@ import { registerInventoryRoutes } from '../inventory/inventory.routes.js';
 import { registerOrderRoutes, uuidField } from '../orders/order-routes.js';
 import type { Authorize } from '../orders/order-routes.js';
 import type { OrderPolicy } from '../orders/order-input.js';
+import type { SendOrderEmail } from '../orders/order-notifications.js';
+import type { PrescriptionStorage } from '../orders/prescription-storage.js';
 import { activeRoles, createManagedUser, findManagedUser, listManagedUsers, permits, resolveUser, setUserRole, setUserStatus } from './access.js';
 import type { Role } from './access.js';
 import type { Auth } from './auth.js';
@@ -32,8 +34,9 @@ function sendChange(reply: FastifyReply, result: 'ok' | 'forbidden' | 'not_found
 
 export function registerAccessRoutes(app: FastifyInstance, options: {
   db: Database; auth: Auth; origin: string; orderPolicy?: OrderPolicy | undefined;
+  prescriptionStorage?: PrescriptionStorage | undefined; sendEmail?: SendOrderEmail | undefined;
 }) {
-  const { db, auth, origin, orderPolicy } = options;
+  const { db, auth, origin, orderPolicy, prescriptionStorage, sendEmail } = options;
   app.register(async (api) => {
     api.addHook('onRequest', async (request, reply) => {
       reply.header('Cache-Control', 'no-store');
@@ -170,7 +173,7 @@ export function registerAccessRoutes(app: FastifyInstance, options: {
         },
       });
     }
-    registerOrderRoutes(api, db, authorize, orderPolicy);
+    registerOrderRoutes(api, db, authorize, { policy: orderPolicy, prescriptionStorage, sendEmail, origin });
     registerInventoryRoutes(api, db, authorize, orderPolicy);
   });
 }

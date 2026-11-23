@@ -66,6 +66,10 @@ services:
       ORDER_LOCATION_IDS: ${ORDER_LOCATION_IDS:-}
       ORDER_RESERVATION_SECONDS: ${ORDER_RESERVATION_SECONDS:-}
       ORDER_DELIVERY_FEE_CLP: ${ORDER_DELIVERY_FEE_CLP:-}
+      ORDER_PRESCRIPTION_PAYMENT_SECONDS: ${ORDER_PRESCRIPTION_PAYMENT_SECONDS:-}
+      PRESCRIPTION_STORAGE_DIR: ${PRESCRIPTION_STORAGE_DIR:-/var/lib/farmacia/prescriptions}
+    volumes:
+      - prescription_storage:/var/lib/farmacia/prescriptions
     command: [pnpm, --filter, api, dev]
     depends_on:
       migrate:
@@ -151,3 +155,4 @@ services:
 
 volumes:
   postgres_data:
+  prescription_storage:

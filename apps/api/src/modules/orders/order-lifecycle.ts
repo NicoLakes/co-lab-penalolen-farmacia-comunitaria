@@ -25,7 +25,7 @@ const reasons = {
   expired: 'Unpaid reservation deadline elapsed',
 };
 
-async function closeReservations(tx: OrderTransaction, orderId: string, operation: Transition) {
+export async function releaseOrderReservations(tx: OrderTransaction, orderId: string) {
   const reservations = await tx.select({ reservation: stockReservations }).from(stockReservations)
     .innerJoin(orderItems, eq(orderItems.id, stockReservations.orderItemId))
     .where(and(eq(orderItems.orderId, orderId), eq(stockReservations.status, 'active')));
@@ -33,29 +33,54 @@ async function closeReservations(tx: OrderTransaction, orderId: string, operatio
   const balanceIds = reservations.map(({ reservation }) => reservation.balanceId);
   await lockBalances(tx, inArray(inventoryBalances.id, balanceIds));
 
-  const fulfilled = operation.target === 'fulfilled';
-  const movementIds = new Map<string, string>();
-  if (fulfilled) {
-    const eligible = await findEligibleBalances(tx, balanceIds);
-    if (eligible.length !== balanceIds.length) {
-      throw new OrderError('unavailable_product', 'An allocated balance is no longer eligible for fulfillment');
-    }
-    const movements = await tx.insert(inventoryMovements).values(reservations.map(({ reservation }) => ({
-      balanceId: reservation.balanceId, movementType: 'sale' as const,
-      quantityDelta: -reservation.quantity, operationId: operation.operationId,
-      reason: reasons.fulfilled, actorReference: operation.actorReference,
-    }))).returning({ id: inventoryMovements.id, balanceId: inventoryMovements.balanceId });
-    for (const movement of movements) movementIds.set(movement.balanceId, movement.id);
-  }
   for (const { reservation } of reservations) {
     const { balanceId, quantity } = reservation;
     await tx.update(inventoryBalances).set({
       reservedQuantity: sql`${inventoryBalances.reservedQuantity} - ${quantity}`,
-      ...(fulfilled && { onHandQuantity: sql`${inventoryBalances.onHandQuantity} - ${quantity}` }),
       updatedAt: sql`clock_timestamp()`,
     }).where(eq(inventoryBalances.id, balanceId));
     await tx.update(stockReservations).set({
-      status: fulfilled ? 'consumed' : 'released',
+      status: 'released',
+      consumedMovementId: null,
+      closedAt: sql`clock_timestamp()`,
+    }).where(eq(stockReservations.id, reservation.id));
+  }
+}
+
+async function closeReservations(tx: OrderTransaction, orderId: string, operation: Transition) {
+  if (operation.target !== 'fulfilled') {
+    await releaseOrderReservations(tx, orderId);
+    return;
+  }
+
+  const reservations = await tx.select({ reservation: stockReservations }).from(stockReservations)
+    .innerJoin(orderItems, eq(orderItems.id, stockReservations.orderItemId))
+    .where(and(eq(orderItems.orderId, orderId), eq(stockReservations.status, 'active')));
+  if (reservations.length === 0) throw new OrderError('conflict', 'Order has no active allocations');
+  const balanceIds = reservations.map(({ reservation }) => reservation.balanceId);
+  await lockBalances(tx, inArray(inventoryBalances.id, balanceIds));
+
+  const eligible = await findEligibleBalances(tx, balanceIds);
+  if (eligible.length !== balanceIds.length) {
+    throw new OrderError('unavailable_product', 'An allocated balance is no longer eligible for fulfillment');
+  }
+  const movements = await tx.insert(inventoryMovements).values(reservations.map(({ reservation }) => ({
+    balanceId: reservation.balanceId, movementType: 'sale' as const,
+    quantityDelta: -reservation.quantity, operationId: operation.operationId,
+    reason: reasons.fulfilled, actorReference: operation.actorReference,
+  }))).returning({ id: inventoryMovements.id, balanceId: inventoryMovements.balanceId });
+  const movementIds = new Map<string, string>();
+  for (const movement of movements) movementIds.set(movement.balanceId, movement.id);
+
+  for (const { reservation } of reservations) {
+    const { balanceId, quantity } = reservation;
+    await tx.update(inventoryBalances).set({
+      reservedQuantity: sql`${inventoryBalances.reservedQuantity} - ${quantity}`,
+      onHandQuantity: sql`${inventoryBalances.onHandQuantity} - ${quantity}`,
+      updatedAt: sql`clock_timestamp()`,
+    }).where(eq(inventoryBalances.id, balanceId));
+    await tx.update(stockReservations).set({
+      status: 'consumed',
       consumedMovementId: movementIds.get(balanceId) ?? null,
       closedAt: sql`clock_timestamp()`,
     }).where(eq(stockReservations.id, reservation.id));
@@ -84,7 +109,13 @@ async function changeOrder(db: Database, orderId: string, input: Transition) {
     }
 
     if (target === 'expired' && order.status !== 'pending_payment') return null;
-    if (order.status !== (target === 'fulfilled' ? 'confirmed' : 'pending_payment')) {
+    if (
+      target === 'fulfilled'
+        ? order.status !== 'confirmed'
+        : target === 'cancelled'
+          ? order.status !== 'pending_payment' && order.status !== 'pending_review'
+          : order.status !== 'pending_payment'
+    ) {
       throw new OrderError('conflict', 'Order state does not allow this operation');
     }
     const [deadline] = await tx.select({ elapsed: lte(orders.reservationExpiresAt, sql`clock_timestamp()`) })

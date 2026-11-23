@@ -5,7 +5,7 @@ new purchasing system is defined in the [ecommerce data model proposal](ecommerc
 which covers orders, payments, operational stock and reservations. The
 commercial catalog, operational stock, order lifecycle and Better Auth pilot
 are implemented. The web cart uses the pilot's permission-checked order route.
-Payment integration and prescription review are pending.
+Payment integration (Webpay Oneclick) is pending; prescription upload and pharmacist review are implemented.
 
 The initial schema stores the product catalog and traceable historical
 observations. It follows the [supplied project context](context/README.md),
@@ -381,6 +381,12 @@ deferred accounting checks and preserves existing catalog and inventory data.
 
 `0004_authentication.sql` adds the Better Auth tables, account status and role
 history. Orders use the existing domain user foreign key.
+
+`0005_prescription_review.sql` extends `order_status` with `pending_review` and
+`rejected`, adds `order_prescriptions` for private prescription file references
+and pharmacist review metadata, allows nullable `orders.reservation_expires_at`
+while awaiting review or rejected, and updates the order triggers so reserved
+stock stays allocated during review and is released on rejection or cancellation.
 
 `pnpm test:integration` runs the database and API suites against `DATABASE_URL`;
 `pnpm db:test` runs both in Docker. Tests cover tracking policy, cross-product

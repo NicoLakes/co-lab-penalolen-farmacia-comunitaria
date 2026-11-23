@@ -4,6 +4,7 @@ export class OrderError extends Error {
   constructor(
     readonly code: 'invalid_input' | 'not_found' | 'conflict' | 'insufficient_stock' | 'unavailable_product' | 'expired',
     message: string,
+    readonly productNames?: readonly string[],
   ) {
     super(message);
     this.name = 'OrderError';
@@ -12,6 +13,7 @@ export class OrderError extends Error {
 
 export const maxInteger = 2_147_483_647;
 export const maxClp = 9_223_372_036_854_775_807n;
+export const defaultPrescriptionPaymentSeconds = 259_200; // 3 days
 
 export function orderUuid(value: string) {
   if (typeof value !== 'string' || !/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(value)) {
@@ -37,6 +39,7 @@ export interface CreateOrderInput {
 export interface OrderPolicy {
   locationIds: readonly string[];
   reservationSeconds: number;
+  prescriptionPaymentSeconds?: number | undefined;
   deliveryFeeClp: number;
 }
 

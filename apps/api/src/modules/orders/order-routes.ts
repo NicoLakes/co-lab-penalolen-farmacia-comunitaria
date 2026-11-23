@@ -1,6 +1,6 @@
 import type { Database } from '@farmacia/database';
-import { authUsers, orderItems, orders, users } from '@farmacia/database/schema';
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { authUsers, orderItems, orderPrescriptions, orders, users } from '@farmacia/database/schema';
+import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Permission, Role } from '../auth/access.js';
 import { authIssuer } from '../auth/auth.js';
@@ -10,10 +10,21 @@ import type { CreateInPersonOrderInput } from './in-person-order.js';
 import { maxInteger, OrderError } from './order-input.js';
 import type { CreateOrderInput, OrderPolicy } from './order-input.js';
 import { cancelPendingOrder, confirmOrderPayment, fulfillOrder } from './order-lifecycle.js';
+import type { SendOrderEmail } from './order-notifications.js';
+import { serializePrescription } from './prescription-orders.js';
+import { registerPrescriptionRoutes } from './prescription-routes.js';
+import type { PrescriptionStorage } from './prescription-storage.js';
 
 export const uuidField = { type: 'string', format: 'uuid' } as const;
 export type Authorize = (request: FastifyRequest, reply: FastifyReply, permission?: Permission) =>
   Promise<{ id: string; email: string; roles: Role[] } | undefined>;
+
+export interface OrderRoutesOptions {
+  policy?: OrderPolicy | undefined;
+  prescriptionStorage?: PrescriptionStorage | undefined;
+  sendEmail?: SendOrderEmail | undefined;
+  origin?: string | undefined;
+}
 
 const orderParams = {
   type: 'object', required: ['orderId'], properties: { orderId: uuidField },
@@ -25,7 +36,7 @@ const fulfillmentListQuery = {
   type: 'object',
   additionalProperties: false,
   properties: {
-    status: { enum: ['confirmed', 'fulfilled'] },
+    status: { enum: ['pending_review', 'confirmed', 'fulfilled', 'rejected'] },
   },
 };
 const createInPersonBody = {
@@ -100,17 +111,32 @@ async function loadOrderItems(db: Database, orderId: string) {
   }).from(orderItems).where(eq(orderItems.orderId, orderId)).orderBy(orderItems.productId);
 }
 
+async function loadOrderPrescription(db: Database, orderId: string) {
+  const [row] = await db.select().from(orderPrescriptions).where(eq(orderPrescriptions.orderId, orderId));
+  return row ? serializePrescription(row) : null;
+}
+
 async function sendOrderResult(reply: FastifyReply, action: () => Promise<unknown>) {
   try {
     return await action();
   } catch (error) {
     if (!(error instanceof OrderError)) throw error;
     const status = error.code === 'not_found' ? 404 : error.code === 'invalid_input' ? 400 : 409;
-    return reply.code(status).send({ code: error.code });
+    return reply.code(status).send({
+      code: error.code,
+      ...(error.productNames?.length ? { productNames: error.productNames } : {}),
+    });
   }
 }
 
-export function registerOrderRoutes(app: FastifyInstance, db: Database, authorize: Authorize, policy?: OrderPolicy) {
+export function registerOrderRoutes(
+  app: FastifyInstance,
+  db: Database,
+  authorize: Authorize,
+  options: OrderRoutesOptions = {},
+) {
+  const { policy, prescriptionStorage, sendEmail, origin } = options;
+
   app.post<{ Body: CreateOrderInput }>('/api/orders', { schema: { body: createBody } }, async (request, reply) => {
     const user = await authorize(request, reply, 'orders.create');
     if (!user) return reply;
@@ -132,11 +158,14 @@ export function registerOrderRoutes(app: FastifyInstance, db: Database, authoriz
     const [order] = await db.select().from(orders)
       .where(and(eq(orders.id, request.params.orderId), eq(orders.buyerId, user.id)));
     if (!order) return reply.code(404).send({ code: 'not_found' });
-    const items = await loadOrderItems(db, order.id);
-    return { ...summary(order), deliveryDetails: order.deliveryDetailsSnapshot, items };
+    const [items, prescription] = await Promise.all([
+      loadOrderItems(db, order.id),
+      loadOrderPrescription(db, order.id),
+    ]);
+    return { ...summary(order), deliveryDetails: order.deliveryDetailsSnapshot, items, prescription };
   });
 
-  app.get<{ Querystring: { status?: 'confirmed' | 'fulfilled' } }>(
+  app.get<{ Querystring: { status?: 'pending_review' | 'confirmed' | 'fulfilled' | 'rejected' } }>(
     '/api/fulfillment/orders',
     { schema: { querystring: fulfillmentListQuery } },
     async (request, reply) => {
@@ -147,7 +176,10 @@ export function registerOrderRoutes(app: FastifyInstance, db: Database, authoriz
         .leftJoin(users, eq(users.id, orders.buyerId))
         .leftJoin(authUsers, and(eq(users.identityIssuer, authIssuer), eq(authUsers.id, users.identitySubject)))
         .where(eq(orders.status, targetStatus))
-        .orderBy(desc(orders.updatedAt), desc(orders.id))
+        .orderBy(
+          targetStatus === 'pending_review' ? asc(orders.createdAt) : desc(orders.updatedAt),
+          targetStatus === 'pending_review' ? asc(orders.id) : desc(orders.id),
+        )
         .limit(50);
       return rows.map((row) => ({ ...summary(row), buyerEmail: row.buyerEmail ?? null }));
     },
@@ -162,14 +194,21 @@ export function registerOrderRoutes(app: FastifyInstance, db: Database, authoriz
       const [row] = await db.select({ order: orders, buyerEmail: authUsers.email }).from(orders)
         .leftJoin(users, eq(users.id, orders.buyerId))
         .leftJoin(authUsers, and(eq(users.identityIssuer, authIssuer), eq(authUsers.id, users.identitySubject)))
-        .where(and(eq(orders.id, request.params.orderId), inArray(orders.status, ['confirmed', 'fulfilled'])));
+        .where(and(
+          eq(orders.id, request.params.orderId),
+          inArray(orders.status, ['pending_review', 'confirmed', 'fulfilled', 'rejected']),
+        ));
       if (!row) return reply.code(404).send({ code: 'not_found' });
-      const items = await loadOrderItems(db, row.order.id);
+      const [items, prescription] = await Promise.all([
+        loadOrderItems(db, row.order.id),
+        loadOrderPrescription(db, row.order.id),
+      ]);
       return {
         ...summary(row.order),
         buyerEmail: row.buyerEmail ?? null,
         deliveryDetails: row.order.deliveryDetailsSnapshot,
         items,
+        prescription,
       };
     },
   );
@@ -225,5 +264,15 @@ export function registerOrderRoutes(app: FastifyInstance, db: Database, authoriz
       if (!order) throw new Error('Fulfillment did not return an order');
       return summary(order);
     });
+  });
+
+  registerPrescriptionRoutes(app, db, {
+    authorize,
+    sendOrderResult,
+    summarizeOrder: summary,
+    policy,
+    storage: prescriptionStorage,
+    sendEmail,
+    origin,
   });
 }
