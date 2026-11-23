@@ -406,7 +406,7 @@ export function StaffOrdersPanel({ onCatalogChanged }: StaffOrdersPanelProps) {
                   </select>
                 </label>
                 <label className="stock-field">
-                  <span>Correo del vecino (opcional, si tiene cuenta)</span>
+                  <span>Correo del vecino (opcional)</span>
                   <input
                     type="email"
                     className="input-busqueda"
