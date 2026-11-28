@@ -86,14 +86,21 @@ body {
 }
 
 .btn-modo-simple {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
   background: #ffffff;
   color: var(--penalolen-navy);
   border: 2px solid #ffffff;
+  font-family: inherit;
   font-weight: 700;
-  padding: 0.75rem 1.15rem;
+  font-size: 0.9em;
+  line-height: 1.2;
+  padding: 0.65rem 1.15rem;
   border-radius: 0.35rem;
   cursor: pointer;
-  font-size: 0.9em;
+  white-space: nowrap;
   transition: background 0.15s ease, color 0.15s ease;
 }
 
@@ -107,27 +114,45 @@ body {
   border-color: #ffffff;
 }
 
-.account-access summary {
-  display: inline-block;
-  min-height: 44px;
+.btn-modo-simple:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 3px;
 }
 
-.account-access summary::-webkit-details-marker {
-  display: none;
+.account-access {
+  position: relative;
 }
 
 .account-access-panel {
-  width: min(20rem, 100%);
-  margin-top: 0.6rem;
+  position: absolute;
+  top: calc(100% + 0.55rem);
+  right: 0;
+  width: min(20rem, calc(100vw - 2rem));
   padding: 1rem;
-  border-radius: 0.35rem;
+  border-radius: 0.4rem;
   background: var(--penalolen-surface);
   color: var(--penalolen-text);
+  border: 1px solid var(--penalolen-border);
+  box-shadow: 0 12px 28px rgba(34, 41, 87, 0.24);
+  z-index: 85;
   overflow-wrap: anywhere;
+}
+
+@media (max-width: 640px) {
+  .account-access-panel {
+    left: 0;
+    right: auto;
+  }
 }
 
 .account-access-panel p {
   margin: 0 0 0.75rem;
+}
+
+.account-email-label {
+  font-size: 0.8em;
+  color: var(--penalolen-text-muted);
+  margin: 0 0 0.2rem !important;
 }
 
 .account-access-panel label,
@@ -135,6 +160,18 @@ body {
   display: block;
   margin-bottom: 0.35rem;
   font-weight: 700;
+  color: var(--penalolen-navy);
+}
+
+.account-menu-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  margin-top: 0.85rem;
+}
+
+.btn-account-full {
+  width: 100%;
 }
 
 .account-access-actions {
@@ -168,10 +205,9 @@ body {
   color: #912222;
 }
 
-.account-access summary:focus-visible,
 .account-access-panel :is(button, input):focus-visible {
-  outline: 2px solid currentColor;
-  outline-offset: 3px;
+  outline: 2px solid var(--penalolen-blue);
+  outline-offset: 2px;
 }
 
 /* Caja blanca superpuesta al banner, igual que el bloque central de penalolen.cl/farmacia */
@@ -360,7 +396,7 @@ body {
   display: flex;
   gap: 0.75rem;
   flex-wrap: wrap;
-  align-items: flex-start;
+  align-items: center;
   max-width: 100%;
 }
 
@@ -627,8 +663,52 @@ body {
   cursor: pointer;
 }
 
-.btn-continuar-checkout:hover {
+.btn-continuar-checkout:hover:not(:disabled) {
   background: var(--penalolen-navy);
+}
+
+.btn-continuar-checkout:disabled {
+  background: #9aa3b2;
+  cursor: not-allowed;
+}
+
+.carrito-alerta-auth {
+  background: #eef2f9;
+  border-left: 4px solid var(--penalolen-blue);
+  color: var(--penalolen-navy);
+  padding: 0.85rem 1rem;
+  border-radius: 0.3rem;
+  font-size: 0.9em;
+  margin-bottom: 1rem;
+}
+
+.carrito-alerta-auth p {
+  margin: 0.35rem 0 0.75rem;
+}
+
+.btn-ir-login {
+  background: var(--penalolen-navy);
+  color: #ffffff;
+  border: none;
+  padding: 0.6rem 1rem;
+  border-radius: 0.3rem;
+  font-weight: 700;
+  font-size: 0.9em;
+  cursor: pointer;
+}
+
+.btn-ir-login:hover {
+  background: var(--penalolen-blue);
+}
+
+.carrito-alerta-error {
+  background: #fbeaea;
+  border-left: 4px solid #b02b2c;
+  color: #7f1d1d;
+  padding: 0.8rem 0.95rem;
+  border-radius: 0.3rem;
+  font-size: 0.9em;
+  margin-bottom: 1rem;
 }
 
 .alerta-pedido-exito {
@@ -663,4 +743,667 @@ body {
   flex-direction: column;
   gap: 0.5rem;
   margin-top: 0.25rem;
+}
+
+.btn-ver-pedidos-exito {
+  margin-top: 0.7rem;
+  background: #065f46;
+  color: #ffffff;
+  border: none;
+  padding: 0.55rem 0.95rem;
+  border-radius: 0.3rem;
+  font-family: inherit;
+  font-weight: 700;
+  font-size: 0.9em;
+  cursor: pointer;
+}
+
+.btn-ver-pedidos-exito:hover {
+  background: #047857;
+}
+
+.btn-secundario {
+  background: #f1f3f7;
+  color: var(--penalolen-navy);
+  border: 1px solid var(--penalolen-border);
+  padding: 0.6rem 1rem;
+  border-radius: 0.3rem;
+  font-family: inherit;
+  font-weight: 700;
+  font-size: 0.9em;
+  cursor: pointer;
+}
+
+.btn-secundario:hover:not(:disabled) {
+  background: #e4e8f2;
+}
+
+.btn-secundario:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-peligro-suave {
+  background: #fbeaea;
+  color: #912222;
+  border: 1px solid #f2c6c6;
+  padding: 0.6rem 1rem;
+  border-radius: 0.3rem;
+  font-family: inherit;
+  font-weight: 700;
+  font-size: 0.9em;
+  cursor: pointer;
+}
+
+.btn-peligro-suave:hover:not(:disabled) {
+  background: #f7dada;
+}
+
+.btn-peligro {
+  background: #b02b2c;
+  color: #ffffff;
+  border: none;
+  padding: 0.6rem 1rem;
+  border-radius: 0.3rem;
+  font-family: inherit;
+  font-weight: 700;
+  font-size: 0.9em;
+  cursor: pointer;
+}
+
+.btn-peligro:hover:not(:disabled) {
+  background: #8f1f20;
+}
+
+.btn-peligro:disabled,
+.btn-peligro-suave:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Secci?n Mis Pedidos */
+.orders-section {
+  position: relative;
+  background: var(--penalolen-surface);
+  padding: 1.75rem 2rem;
+  border-radius: 0.35rem;
+  border: 1px solid var(--penalolen-border);
+  box-shadow: 0 4px 16px rgba(34, 41, 87, 0.08);
+}
+
+.orders-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--penalolen-border);
+  padding-bottom: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.orders-title {
+  margin: 0;
+  font-size: 1.45em;
+  color: var(--penalolen-navy);
+}
+
+.orders-subtitle {
+  margin: 0.25rem 0 0;
+  color: var(--penalolen-text-muted);
+  font-size: 0.92em;
+}
+
+.orders-toolbar-actions {
+  display: flex;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+}
+
+.orders-empty-box {
+  text-align: center;
+  padding: 2rem 1rem;
+}
+
+.orders-empty {
+  color: var(--penalolen-text-muted);
+  margin: 0 0 1rem;
+}
+
+.orders-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.order-card {
+  border: 1px solid var(--penalolen-border);
+  border-radius: 0.4rem;
+  padding: 1.2rem;
+  background: var(--penalolen-bg);
+}
+
+.order-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+}
+
+.order-number {
+  font-weight: 800;
+  font-size: 1.05em;
+  color: var(--penalolen-navy);
+}
+
+.order-date {
+  font-size: 0.88em;
+  color: var(--penalolen-text-muted);
+}
+
+.order-status-badge {
+  display: inline-block;
+  font-size: 0.78em;
+  font-weight: 700;
+  padding: 0.25rem 0.65rem;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.order-status-badge.status-pending_payment {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.order-status-badge.status-confirmed {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.order-status-badge.status-fulfilled {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.order-status-badge.status-cancelled,
+.order-status-badge.status-expired {
+  background: #f3f4f6;
+  color: #4b5563;
+}
+
+.order-card-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.9rem;
+}
+
+.order-meta-label {
+  color: var(--penalolen-text-muted);
+  font-size: 0.88em;
+}
+
+.order-expiry {
+  margin: 0.25rem 0 0;
+  font-size: 0.85em;
+  color: #92400e;
+}
+
+.order-total {
+  text-align: right;
+  display: flex;
+  flex-direction: column;
+}
+
+.order-total strong {
+  font-size: 1.25em;
+  color: var(--penalolen-navy);
+}
+
+.order-card-actions {
+  display: flex;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+}
+
+.order-cancel-confirm {
+  margin-top: 0.9rem;
+  padding: 0.9rem 1rem;
+  border-radius: 0.35rem;
+  background: #fff5f5;
+  border: 1px solid #f2c6c6;
+  color: #7f1d1d;
+}
+
+.order-cancel-confirm p {
+  margin: 0 0 0.75rem;
+  font-size: 0.92em;
+}
+
+.order-cancel-confirm-actions {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.order-detail-box {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--penalolen-border);
+}
+
+.order-detail-heading {
+  margin: 0 0 0.6rem;
+  font-size: 0.95em;
+  color: var(--penalolen-navy);
+}
+
+.order-items-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.order-item-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 0.85rem;
+  background: var(--penalolen-surface);
+  border: 1px solid var(--penalolen-border);
+  border-radius: 0.3rem;
+}
+
+.order-item-row > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.order-item-sub {
+  font-size: 0.82em;
+  color: var(--penalolen-text-muted);
+}
+
+.order-delivery-info {
+  margin-top: 1rem;
+  padding: 0.85rem;
+  background: var(--penalolen-surface);
+  border: 1px solid var(--penalolen-border);
+  border-radius: 0.3rem;
+  font-size: 0.9em;
+}
+
+.order-delivery-info p {
+  margin: 0.2rem 0;
+}
+
+/* Panel de administración */
+.admin-tabs {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--penalolen-border);
+  padding-bottom: 0.85rem;
+  margin-bottom: 1.25rem;
+}
+
+.admin-tab {
+  background: #f1f3f7;
+  color: var(--penalolen-navy);
+  border: 1px solid var(--penalolen-border);
+  padding: 0.55rem 1.1rem;
+  border-radius: 0.3rem;
+  font-family: inherit;
+  font-weight: 700;
+  font-size: 0.92em;
+  cursor: pointer;
+}
+
+.admin-tab:hover {
+  background: #e4e8f2;
+}
+
+.admin-tab.activo {
+  background: var(--penalolen-navy);
+  color: #ffffff;
+  border-color: var(--penalolen-navy);
+}
+
+.admin-section-intro {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.admin-subheading {
+  margin: 0;
+  font-size: 1.15em;
+  color: var(--penalolen-navy);
+}
+
+.admin-search-form {
+  margin-bottom: 1.25rem;
+}
+
+.admin-search-label {
+  display: block;
+  font-weight: 700;
+  color: var(--penalolen-navy);
+  margin-bottom: 0.4rem;
+  font-size: 0.92em;
+}
+
+.admin-search-row {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.admin-search-row .input-busqueda {
+  flex: 1 1 260px;
+}
+
+.admin-users-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.admin-user-card {
+  border: 1px solid var(--penalolen-border);
+  border-radius: 0.4rem;
+  padding: 1.1rem 1.2rem;
+  background: var(--penalolen-bg);
+}
+
+.admin-user-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.65rem;
+}
+
+.admin-user-email {
+  color: var(--penalolen-navy);
+  font-size: 1.02em;
+  overflow-wrap: anywhere;
+}
+
+.admin-self-tag {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.74em;
+  font-weight: 700;
+  background: #eef2f9;
+  color: var(--penalolen-blue);
+}
+
+.admin-user-roles {
+  display: flex;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.9rem;
+}
+
+.admin-role-chip {
+  display: inline-block;
+  padding: 0.22rem 0.6rem;
+  border-radius: 0.25rem;
+  font-size: 0.8em;
+  font-weight: 700;
+}
+
+.admin-role-chip.role-buyer {
+  background: #e8f5ee;
+  color: #1f6b43;
+}
+
+.admin-role-chip.role-pharmacy_operator {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.admin-role-chip.role-user_admin {
+  background: #ede9fe;
+  color: #5b21b6;
+}
+
+.admin-role-chip.role-none {
+  background: #f3f4f6;
+  color: #4b5563;
+}
+
+.admin-user-actions {
+  display: flex;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.admin-lock-note {
+  font-size: 0.85em;
+  color: var(--penalolen-text-muted);
+}
+
+.admin-create-card {
+  background: #f4f7fc;
+  border: 1px solid var(--penalolen-border);
+  border-radius: 0.4rem;
+  padding: 1.05rem 1.2rem;
+  margin-bottom: 1.25rem;
+}
+
+.admin-create-title {
+  margin: 0 0 0.7rem;
+  font-size: 1em;
+  color: var(--penalolen-navy);
+}
+
+.admin-create-roles {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-top: 0.75rem;
+}
+
+.admin-checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.9em;
+  font-weight: 600;
+  color: var(--penalolen-navy);
+  cursor: pointer;
+}
+
+/* Panel de gestión - Stock */
+.stock-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 0.9rem;
+}
+
+.stock-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85em;
+  font-weight: 700;
+  color: var(--penalolen-navy);
+}
+
+.stock-form-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.stock-filters-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin-bottom: 1.2rem;
+}
+
+.stock-filter-chips {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.stock-card-hidden {
+  border-style: dashed;
+  background: #f5f6f8;
+}
+
+.stock-code-pill {
+  display: inline-block;
+  margin-right: 0.5rem;
+  padding: 0.12rem 0.45rem;
+  border-radius: 0.25rem;
+  background: #e8edf6;
+  color: var(--penalolen-navy);
+  font-size: 0.8em;
+  font-weight: 700;
+}
+
+.stock-meta-inline {
+  font-size: 0.85em;
+  color: var(--penalolen-text-muted);
+}
+
+.stock-badges {
+  display: flex;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.stock-description {
+  margin: 0 0 0.75rem;
+  font-size: 0.88em;
+  color: var(--penalolen-text-muted);
+}
+
+.stock-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 0.6rem;
+  padding: 0.75rem 0.9rem;
+  margin-bottom: 0.9rem;
+  background: var(--penalolen-surface);
+  border: 1px solid var(--penalolen-border);
+  border-radius: 0.35rem;
+}
+
+.stock-metrics > div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.stock-metrics strong {
+  color: var(--penalolen-navy);
+  font-size: 1.05em;
+}
+
+.stock-zero {
+  color: #b02b2c !important;
+}
+
+.stock-inline-box {
+  margin-top: 0.9rem;
+  padding: 0.95rem 1rem;
+  background: var(--penalolen-surface);
+  border: 1px solid var(--penalolen-border);
+  border-radius: 0.35rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.stock-adjust-row {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.stock-qty-input {
+  width: 110px;
+  flex: 0 0 110px;
+}
+
+.stock-adjust-row .input-busqueda:not(.stock-qty-input) {
+  flex: 1 1 220px;
+}
+
+.staff-order-buyer {
+  margin: 0 0 0.25rem;
+}
+
+/* Historial de movimientos de stock (Auditoría Admin) */
+.movement-delta-pos,
+.movement-delta-neg {
+  display: inline-block;
+  min-width: 2.5rem;
+  text-align: center;
+  padding: 0.22rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.84em;
+  font-weight: 800;
+}
+
+.movement-delta-pos {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.movement-delta-neg {
+  background: #fbeaea;
+  color: #912222;
+}
+
+.movement-meta-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  font-size: 0.85em;
+  color: var(--penalolen-text-muted);
+}
+
+.alerta-exito-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.7rem;
+}
+
+.alerta-exito-actions .btn-ver-pedidos-exito {
+  margin-top: 0;
 }

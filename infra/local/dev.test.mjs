@@ -5,8 +5,8 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { main, prepareEnvironment, selectPorts } from './dev.mjs';
 
-const defaults = 'POSTGRES_USER=farmacia\nPOSTGRES_DB=farmacia\nPOSTGRES_PASSWORD=\nWEB_PORT=5173\nAPI_PORT=3001\nPOSTGRES_PORT=5432\n';
-const ports = { WEB_PORT: '5173', API_PORT: '3001', POSTGRES_PORT: '5432' };
+const defaults = 'POSTGRES_USER=farmacia\nPOSTGRES_DB=farmacia\nPOSTGRES_PASSWORD=\nWEB_PORT=5173\nAPI_PORT=3001\nPOSTGRES_PORT=5432\nMAILPIT_PORT=8025\nMAILPIT_SMTP_PORT=1025\n';
+const ports = { WEB_PORT: '5173', API_PORT: '3001', POSTGRES_PORT: '5432', MAILPIT_PORT: '8025', MAILPIT_SMTP_PORT: '1025' };
 
 async function fixture(t) {
   const directory = await mkdtemp(join(tmpdir(), 'farmacia-dev-test-'));
@@ -57,9 +57,9 @@ test('rechaza configuración inválida sin incluir secretos en el error', async 
 });
 
 test('busca puertos libres cuando otro proyecto ocupa los preferidos', async () => {
-  const occupied = new Set([5173, 3001, 5432]);
+  const occupied = new Set([5173, 3001, 5432, 8025, 1025]);
   const env = await selectPorts(ports, [], async (port) => !occupied.has(port));
-  assert.deepEqual(env, { WEB_PORT: '5174', API_PORT: '3002', POSTGRES_PORT: '5433' });
+  assert.deepEqual(env, { WEB_PORT: '5174', API_PORT: '3002', POSTGRES_PORT: '5433', MAILPIT_PORT: '8026', MAILPIT_SMTP_PORT: '1026' });
 });
 
 test('reutiliza los puertos del proyecto en ejecución y evita duplicados', async () => {

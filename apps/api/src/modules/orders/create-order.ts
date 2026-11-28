@@ -53,7 +53,7 @@ export async function createOrder(db: Database, buyerId: string, input: CreateOr
     }
 
     const balancesById = new Map(balances.map((balance) => [balance.id, balance]));
-    const eligible = await findEligibleBalances(tx, balances.map((balance) => balance.id));
+    const eligible = await findEligibleBalances(tx, balances.map((balance) => balance.id), supportedSaleConditions);
     const byProduct = new Map<string, typeof balances>();
     for (const { id } of eligible) {
       const balance = balancesById.get(id);
@@ -63,6 +63,7 @@ export async function createOrder(db: Database, buyerId: string, input: CreateOr
       byProduct.set(balance.productId, productBalances);
     }
     const allocations: { productId: string; balanceId: string; quantity: number }[] = [];
+    const insufficientProducts: string[] = [];
     for (const line of lines) {
       let remaining = line.quantity;
       for (const balance of byProduct.get(line.productId) ?? []) {
@@ -71,7 +72,10 @@ export async function createOrder(db: Database, buyerId: string, input: CreateOr
         remaining -= quantity;
         if (remaining === 0) break;
       }
-      if (remaining > 0) throw new OrderError('insufficient_stock', 'Insufficient eligible inventory');
+      if (remaining > 0) insufficientProducts.push(line.productNameSnapshot);
+    }
+    if (insufficientProducts.length > 0) {
+      throw new OrderError('insufficient_stock', 'Insufficient eligible inventory', insufficientProducts);
     }
 
     const [order] = await tx.insert(orders).values({

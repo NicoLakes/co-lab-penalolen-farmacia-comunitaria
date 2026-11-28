@@ -2,6 +2,9 @@ import { useCallback, useEffect, useState } from 'react';
 import logoPenalolen from '../../assets/logo-penalolen.png';
 import { AccountPanel } from '../auth/AccountPanel';
 import type { Account } from '../auth/AccountPanel';
+import { AdminSection } from '../admin/AdminSection';
+import { ManagementSection } from '../management/ManagementSection';
+import { OrdersSection } from '../orders/OrdersSection';
 import { MEDICAMENTOS_INICIALES } from './medicamentos.mock';
 import type { Medicamento } from './medicamentos.mock';
 import { CarritoPanel } from './CarritoPanel';
@@ -18,6 +21,7 @@ interface CatalogItem {
   therapeuticCategory: string;
   priceClp: number;
   stock: number;
+  saleCondition?: string;
   requiresPrescription: boolean;
 }
 
@@ -40,8 +44,15 @@ export function CatalogoPage() {
   const [busqueda, setBusqueda] = useState('');
   const [categoriaActiva, setCategoriaActiva] = useState('TODAS');
   const [modoSimple, setModoSimple] = useState(false);
+  const [vistaActiva, setVistaActiva] = useState<'catalogo' | 'pedidos' | 'admin' | 'gestion'>('catalogo');
   const [carrito, setCarrito] = useState<ItemCarrito[]>([]);
   const [carritoAbierto, setCarritoAbierto] = useState(false);
+  const [menuCuentaAbierto, setMenuCuentaAbierto] = useState(false);
+
+  const handleAccountChange = useCallback((account: Account | null) => {
+    setCuentaActiva(account);
+    if (!account) setVistaActiva('catalogo');
+  }, []);
 
   const cargarCatalogo = useCallback((signal?: AbortSignal) => {
     return fetch('/api/catalog', signal ? { signal } : undefined).then(async (response) => {
@@ -68,6 +79,7 @@ export function CatalogoPage() {
         precio: item.priceClp,
         stock: item.stock,
         requiereReceta: item.requiresPrescription,
+        condicionVenta: typeof item.saleCondition === 'string' ? item.saleCondition : undefined,
       }));
       setMedicamentos(catalogo);
       const porCodigo = new Map(catalogo.map((medicamento) => [medicamento.codigo, medicamento]));
@@ -146,6 +158,12 @@ export function CatalogoPage() {
     return coincideTexto && coincideCategoria;
   });
 
+  const puedeVerAdmin = Boolean(cuentaActiva?.roles.includes('user_admin'));
+  const puedeVerGestion = Boolean(cuentaActiva?.roles.includes('pharmacy_operator'));
+  const mostrandoGestion = vistaActiva === 'gestion' && puedeVerGestion;
+  const mostrandoAdmin = vistaActiva === 'admin' && puedeVerAdmin;
+  const mostrandoPedidos = vistaActiva === 'pedidos' && Boolean(cuentaActiva);
+
   // 4. Return que construye la página del cliente con las funciones creadas anteriormente
   return (
     <div className={modoSimple ? 'portal modo-simple' : 'portal'}>
@@ -161,10 +179,16 @@ export function CatalogoPage() {
           </div>
           <h1>Farmacia Comunitaria</h1>
           <p className="subtitulo">
-            {modoSimple
-              ? 'Paso 1: Escriba el nombre de su remedio abajo para buscarlo.'
-              : 'Consulta disponibilidad, precios solidarios y solicita tus medicamentos en línea.'}
-            {!fuenteBaseDatos && ' · Catálogo de referencia'}
+            {mostrandoAdmin
+              ? 'Administración de cuentas y roles de la Farmacia Comunitaria.'
+              : mostrandoGestion
+                ? 'Gestión de stock y operación de funcionarios.'
+                : mostrandoPedidos
+              ? 'Seguimiento y estado de tus solicitudes de medicamentos.'
+              : modoSimple
+                ? 'Paso 1: Escriba el nombre de su remedio abajo para buscarlo.'
+                : 'Consulta disponibilidad, precios solidarios y solicita tus medicamentos en línea.'}
+            {!mostrandoAdmin && !mostrandoGestion && !mostrandoPedidos && !fuenteBaseDatos && ' · Catálogo de referencia'}
           </p>
         </div>
         <div className="header-actions">
@@ -175,110 +199,151 @@ export function CatalogoPage() {
           >
             {modoSimple ? 'Modo Simple Activado (Ver vista estándar)' : 'Activar Modo Simple (Letra Grande)'}
           </button>
-          <AccountPanel onAccountChange={setCuentaActiva} />
+          {modoSimple && cuentaActiva?.roles.includes('buyer') && (
+            <button
+              type="button"
+              className={mostrandoPedidos ? 'btn-modo-simple activo' : 'btn-modo-simple'}
+              onClick={() => setVistaActiva(mostrandoPedidos ? 'catalogo' : 'pedidos')}
+            >
+              {mostrandoPedidos ? 'Ver catálogo' : 'Mis pedidos'}
+            </button>
+          )}
+          <AccountPanel
+            onAccountChange={handleAccountChange}
+            open={menuCuentaAbierto}
+            onOpenChange={setMenuCuentaAbierto}
+            onOpenOrders={() => setVistaActiva('pedidos')}
+            onOpenAdmin={puedeVerAdmin ? () => setVistaActiva('admin') : undefined}
+            onOpenManagement={puedeVerGestion ? () => setVistaActiva('gestion') : undefined}
+          />
         </div>
       </header>
 
-      {/* Barra de Búsqueda */}
-      <section className="buscador-section" aria-label="Buscador de medicamentos">
-        <label htmlFor="input-busqueda" className="label-busqueda">
-          Buscar por Principio Activo o Nombre del medicamento:
-        </label>
-        <input
-          id="input-busqueda"
-          type="search"
-          className="input-busqueda"
-          placeholder="Ej: Acido Valproico, Atemperator, Acenocumarol, Alcohol..."
-          value={busqueda}
-          onChange={(e) => setBusqueda(e.target.value)}
+      {mostrandoAdmin && cuentaActiva ? (
+        <AdminSection
+          account={cuentaActiva}
+          onBackToCatalog={() => setVistaActiva('catalogo')}
         />
-        {/* En Modo Simple ocultamos filtros secundarios para no confundir al adulto mayor */}
-        {!modoSimple && (
-          <div className="filtros-categorias">
-            {categorias.map((cat) => (
-              <button
-                key={cat}
-                type="button"
-                className={categoriaActiva === cat ? 'chip activo' : 'chip'}
-                onClick={() => setCategoriaActiva(cat)}
-              >
-                {cat}
-              </button>
-            ))}
-          </div>
-        )}
-      </section>
-
-      {/* Grilla de Medicamentos */}
-      <section className="grilla-medicamentos">
-        {medicamentosFiltrados.map((med) => (
-          <article key={med.codigo} className="card-medicamento">
-            <div className="card-top">
-              <span className="tag-categoria">{med.clasificacionTerapeutica}</span>
-              <span className={med.requiereReceta ? 'tag-receta obligatoria' : 'tag-receta libre'}>
-                {med.requiereReceta ? 'Requiere Receta Médica' : 'Venta directa'}
-              </span>
-            </div>
-            <h2 className="med-titulo">{med.principioActivo}</h2>
-            <p className="med-descriptor">{med.descriptor}</p>
-            {/* En Modo Simple mostramos solo lo esencial; en modo normal el detalle técnico */}
+      ) : mostrandoGestion && cuentaActiva ? (
+        <ManagementSection
+          account={cuentaActiva}
+          onBackToCatalog={() => setVistaActiva('catalogo')}
+          onCatalogChanged={() => void cargarCatalogo()}
+        />
+      ) : mostrandoPedidos ? (
+        <OrdersSection
+          modoSimple={modoSimple}
+          onBackToCatalog={() => setVistaActiva('catalogo')}
+          onOrderCancelled={() => void cargarCatalogo()}
+        />
+      ) : (
+        <>
+          {/* Barra de Búsqueda */}
+          <section className="buscador-section" aria-label="Buscador de medicamentos">
+            <label htmlFor="input-busqueda" className="label-busqueda">
+              Buscar por Principio Activo o Nombre del medicamento:
+            </label>
+            <input
+              id="input-busqueda"
+              type="search"
+              className="input-busqueda"
+              placeholder="Ej: Acido Valproico, Atemperator, Acenocumarol, Alcohol..."
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+            />
+            {/* En Modo Simple ocultamos filtros secundarios para no confundir al adulto mayor */}
             {!modoSimple && (
-              <p className="med-meta">
-                <strong>Presentación:</strong> {med.presentacion} · <strong>Lab:</strong> {med.proveedor}
+              <div className="filtros-categorias">
+                {categorias.map((cat) => (
+                  <button
+                    key={cat}
+                    type="button"
+                    className={categoriaActiva === cat ? 'chip activo' : 'chip'}
+                    onClick={() => setCategoriaActiva(cat)}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
+
+          {/* Grilla de Medicamentos */}
+          <section className="grilla-medicamentos">
+            {medicamentosFiltrados.map((med) => (
+              <article key={med.codigo} className="card-medicamento">
+                <div className="card-top">
+                  <span className="tag-categoria">{med.clasificacionTerapeutica}</span>
+                  <span className={med.requiereReceta ? 'tag-receta obligatoria' : 'tag-receta libre'}>
+                    {med.condicionVenta === 'prescription_cheque'
+                      ? 'Receta cheque · Solo presencial'
+                      : med.requiereReceta
+                        ? 'Requiere Receta Médica'
+                        : 'Venta directa'}
+                  </span>
+                </div>
+                <h2 className="med-titulo">{med.principioActivo}</h2>
+                <p className="med-descriptor">{med.descriptor}</p>
+                {/* En Modo Simple mostramos solo lo esencial; en modo normal el detalle técnico */}
+                {!modoSimple && (
+                  <p className="med-meta">
+                    <strong>Presentación:</strong> {med.presentacion} · <strong>Lab:</strong> {med.proveedor}
+                  </p>
+                )}
+                <div className="card-footer">
+                  <div>
+                    <span className="med-precio">${med.precio.toLocaleString('es-CL')}</span>
+                    <span className="med-stock">Stock: {med.stock} disp.</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn-agregar"
+                    disabled={med.stock <= 0}
+                    onClick={() => agregarAlCarrito(med)}
+                  >
+                    {med.stock > 0 ? '+ Agregar al carrito' : 'Sin stock'}
+                  </button>
+                </div>
+              </article>
+            ))}
+            {medicamentosFiltrados.length === 0 && (
+              <p className="sin-resultados">
+                No encontramos medicamentos con &quot;{busqueda}&quot;. Intente con otro nombre.
               </p>
             )}
-            <div className="card-footer">
-              <div>
-                <span className="med-precio">${med.precio.toLocaleString('es-CL')}</span>
-                <span className="med-stock">Stock: {med.stock} disp.</span>
-              </div>
-              <button
-                type="button"
-                className="btn-agregar"
-                disabled={med.stock <= 0}
-                onClick={() => agregarAlCarrito(med)}
-              >
-                {med.stock > 0 ? '+ Agregar al carrito' : 'Sin stock'}
-              </button>
-            </div>
-          </article>
-        ))}
-        {medicamentosFiltrados.length === 0 && (
-          <p className="sin-resultados">
-            No encontramos medicamentos con "{busqueda}". Intente con otro nombre.
-          </p>
-        )}
-      </section>
+          </section>
 
-      {/* Botón circular flotante del carrito en la parte inferior derecha */}
-      <button
-        type="button"
-        className={carritoAbierto ? 'btn-carrito-flotante oculto' : 'btn-carrito-flotante'}
-        onClick={() => setCarritoAbierto(!carritoAbierto)}
-        aria-label={`Abrir carrito de compras (${totalUnidades} productos, total $${totalPrecio.toLocaleString('es-CL')})`}
-        aria-expanded={carritoAbierto}
-        title={`Mi Carrito (${totalUnidades}) - $${totalPrecio.toLocaleString('es-CL')}`}
-      >
-        <svg
-          className="icono-carrito"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden="true"
-        >
-          <circle cx="9" cy="21" r="1.5" />
-          <circle cx="19" cy="21" r="1.5" />
-          <path d="M2.5 3h2.8l2.4 11.4a2 2 0 0 0 2 1.6h9.6a2 2 0 0 0 1.9-1.5L23 6H6.2" />
-        </svg>
-        {totalUnidades > 0 && (
-          <span className="carrito-badge" aria-hidden="true">
-            {totalUnidades}
-          </span>
-        )}
-      </button>
+          {/* Botón circular flotante del carrito en la parte inferior derecha */}
+          <button
+            type="button"
+            className={carritoAbierto ? 'btn-carrito-flotante oculto' : 'btn-carrito-flotante'}
+            onClick={() => setCarritoAbierto(!carritoAbierto)}
+            aria-label={`Abrir carrito de compras (${totalUnidades} productos, total $${totalPrecio.toLocaleString('es-CL')})`}
+            aria-expanded={carritoAbierto}
+            title={`Mi Carrito (${totalUnidades}) - $${totalPrecio.toLocaleString('es-CL')}`}
+          >
+            <svg
+              className="icono-carrito"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <circle cx="9" cy="21" r="1.5" />
+              <circle cx="19" cy="21" r="1.5" />
+              <path d="M2.5 3h2.8l2.4 11.4a2 2 0 0 0 2 1.6h9.6a2 2 0 0 0 1.9-1.5L23 6H6.2" />
+            </svg>
+            {totalUnidades > 0 && (
+              <span className="carrito-badge" aria-hidden="true">
+                {totalUnidades}
+              </span>
+            )}
+          </button>
+        </>
+      )}
 
       <CarritoPanel
         key={cuentaActiva?.email}
@@ -288,6 +353,17 @@ export function CatalogoPage() {
         deliveryFeeClp={deliveryFeeClp}
         onCerrar={() => setCarritoAbierto(false)}
         onCambiarCantidad={cambiarCantidad}
+        onSolicitarInicioSesion={() => {
+          setCarritoAbierto(false);
+          setMenuCuentaAbierto(true);
+        }}
+        onVerMisPedidos={() => {
+          setCarritoAbierto(false);
+          setVistaActiva('pedidos');
+        }}
+        onStockAgotado={() => {
+          void cargarCatalogo();
+        }}
         onPedidoCreado={() => {
           setCarrito([]);
           void cargarCatalogo();

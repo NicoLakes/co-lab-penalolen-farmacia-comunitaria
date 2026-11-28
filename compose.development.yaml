@@ -26,6 +26,21 @@ services:
       timeout: 3s
       retries: 20
 
+  mailpit:
+    image: axllent/mailpit:v1.27
+    init: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    stop_grace_period: 10s
+    ports:
+      - "127.0.0.1:${MAILPIT_PORT:-8025}:8025"
+      - "127.0.0.1:${MAILPIT_SMTP_PORT:-1025}:1025"
+    healthcheck:
+      test: [CMD, /mailpit, readyz]
+      interval: 3s
+      timeout: 5s
+      retries: 15
+
   migrate:
     <<: *runtime
     environment:
@@ -51,6 +66,10 @@ services:
       ORDER_LOCATION_IDS: ${ORDER_LOCATION_IDS:-}
       ORDER_RESERVATION_SECONDS: ${ORDER_RESERVATION_SECONDS:-}
       ORDER_DELIVERY_FEE_CLP: ${ORDER_DELIVERY_FEE_CLP:-}
+      ORDER_PRESCRIPTION_PAYMENT_SECONDS: ${ORDER_PRESCRIPTION_PAYMENT_SECONDS:-}
+      PRESCRIPTION_STORAGE_DIR: ${PRESCRIPTION_STORAGE_DIR:-/var/lib/farmacia/prescriptions}
+    volumes:
+      - prescription_storage:/var/lib/farmacia/prescriptions
     command: [pnpm, --filter, api, dev]
     depends_on:
       migrate:
@@ -68,7 +87,6 @@ services:
         - action: sync
           path: ./apps/api/src
           target: /workspace/apps/api/src
-          initial_sync: true
         - action: rebuild
           path: ./apps/api/package.json
         - action: rebuild
@@ -110,11 +128,9 @@ services:
         - action: sync
           path: ./apps/web/src
           target: /workspace/apps/web/src
-          initial_sync: true
         - action: sync
           path: ./apps/web/index.html
           target: /workspace/apps/web/index.html
-          initial_sync: true
         - action: sync+restart
           path: ./apps/web/vite.config.ts
           target: /workspace/apps/web/vite.config.ts
@@ -139,3 +155,4 @@ services:
 
 volumes:
   postgres_data:
+  prescription_storage:

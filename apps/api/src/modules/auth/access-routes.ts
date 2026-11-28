@@ -1,10 +1,14 @@
 import type { Database } from '@farmacia/database';
 import { fromNodeHeaders } from 'better-auth/node';
 import type { FastifyInstance, FastifyReply } from 'fastify';
+import { registerInventoryRoutes } from '../inventory/inventory.routes.js';
 import { registerOrderRoutes, uuidField } from '../orders/order-routes.js';
 import type { Authorize } from '../orders/order-routes.js';
 import type { OrderPolicy } from '../orders/order-input.js';
-import { activeRoles, findManagedUser, permits, resolveUser, setUserRole, setUserStatus } from './access.js';
+import type { SendOrderEmail } from '../orders/order-notifications.js';
+import type { PrescriptionStorage } from '../orders/prescription-storage.js';
+import { activeRoles, createManagedUser, findManagedUser, listManagedUsers, permits, resolveUser, setUserRole, setUserStatus } from './access.js';
+import type { Role } from './access.js';
 import type { Auth } from './auth.js';
 
 const emailField = { type: 'string', format: 'email', maxLength: 254 };
@@ -30,8 +34,9 @@ function sendChange(reply: FastifyReply, result: 'ok' | 'forbidden' | 'not_found
 
 export function registerAccessRoutes(app: FastifyInstance, options: {
   db: Database; auth: Auth; origin: string; orderPolicy?: OrderPolicy | undefined;
+  prescriptionStorage?: PrescriptionStorage | undefined; sendEmail?: SendOrderEmail | undefined;
 }) {
-  const { db, auth, origin, orderPolicy } = options;
+  const { db, auth, origin, orderPolicy, prescriptionStorage, sendEmail } = options;
   app.register(async (api) => {
     api.addHook('onRequest', async (request, reply) => {
       reply.header('Cache-Control', 'no-store');
@@ -65,7 +70,13 @@ export function registerAccessRoutes(app: FastifyInstance, options: {
         if (retryAfter) reply.header('Retry-After', retryAfter);
         await response.body?.cancel();
         if (response.ok) return { ok: true };
-        const code = response.status === 429 ? 'rate_limited' : response.status >= 500 ? 'auth_unavailable' : 'auth_rejected';
+        const code = response.status === 429
+          ? 'rate_limited'
+          : response.status === 403 && action.path === '/api/auth/sign-in/email-otp'
+            ? 'account_disabled'
+            : response.status >= 500
+              ? 'auth_unavailable'
+              : 'auth_rejected';
         return reply.code(response.status).send({ code });
       });
     }
@@ -90,6 +101,46 @@ export function registerAccessRoutes(app: FastifyInstance, options: {
     };
 
     api.get('/api/me', async (request, reply) => await authorize(request, reply) ?? reply);
+    api.get<{ Querystring: { q?: string; limit?: number } }>('/api/admin/users', {
+      schema: {
+        querystring: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            q: { type: 'string', maxLength: 254 },
+            limit: { type: 'integer', minimum: 1, maximum: 100 },
+          },
+        },
+      },
+    }, async (request, reply) => {
+      const admin = await authorize(request, reply, 'users.manage_access');
+      if (!admin) return reply;
+      return listManagedUsers(db, request.query.q, request.query.limit);
+    });
+    api.post<{ Body: { email: string; roles?: Role[] } }>('/api/admin/users', {
+      schema: {
+        body: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['email'],
+          properties: {
+            email: emailField,
+            roles: {
+              type: 'array',
+              uniqueItems: true,
+              maxItems: 3,
+              items: { enum: ['buyer', 'pharmacy_operator', 'user_admin'] },
+            },
+          },
+        },
+      },
+    }, async (request, reply) => {
+      const admin = await authorize(request, reply, 'users.manage_access');
+      if (!admin) return reply;
+      const created = await createManagedUser(db, request.body, admin.id);
+      if (created === 'conflict') return reply.code(409).send({ code: 'email_already_exists' });
+      return reply.code(201).send(created);
+    });
     api.post<{ Body: { email: string } }>('/api/admin/users/lookup', {
       schema: { body: { type: 'object', required: ['email'], properties: { email: emailField } } },
     }, async (request, reply) => {
@@ -110,10 +161,10 @@ export function registerAccessRoutes(app: FastifyInstance, options: {
     });
 
     for (const method of ['PUT', 'DELETE'] as const) {
-      api.route<{ Params: { userId: string; role: 'buyer' | 'pharmacy_operator' } }>({
+      api.route<{ Params: { userId: string; role: Role } }>({
         method, url: '/api/admin/users/:userId/roles/:role',
         schema: { params: { type: 'object', required: ['userId', 'role'],
-          properties: { userId: uuidField, role: { enum: ['buyer', 'pharmacy_operator'] } } } },
+          properties: { userId: uuidField, role: { enum: ['buyer', 'pharmacy_operator', 'user_admin'] } } } },
         async handler(request, reply) {
           const admin = await authorize(request, reply, 'users.manage_access');
           if (!admin) return reply;
@@ -122,6 +173,7 @@ export function registerAccessRoutes(app: FastifyInstance, options: {
         },
       });
     }
-    registerOrderRoutes(api, db, authorize, orderPolicy);
+    registerOrderRoutes(api, db, authorize, { policy: orderPolicy, prescriptionStorage, sendEmail, origin });
+    registerInventoryRoutes(api, db, authorize, orderPolicy);
   });
 }

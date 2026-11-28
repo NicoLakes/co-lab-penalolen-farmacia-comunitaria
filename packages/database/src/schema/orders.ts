@@ -4,9 +4,12 @@ import { inventoryBalances, inventoryMovements } from './operational-inventory.j
 import { productSaleCondition, products } from './products.js';
 import { users } from './users.js';
 
-export const orderStatus = pgEnum('order_status', ['pending_payment', 'confirmed', 'fulfilled', 'cancelled', 'expired']);
+export const orderStatus = pgEnum('order_status', [
+  'pending_review', 'pending_payment', 'confirmed', 'fulfilled', 'cancelled', 'expired', 'rejected',
+]);
 export const fulfillmentMethod = pgEnum('fulfillment_method', ['pickup', 'delivery']);
 export const stockReservationStatus = pgEnum('stock_reservation_status', ['active', 'released', 'consumed']);
+export const prescriptionReviewStatus = pgEnum('prescription_review_status', ['pending', 'approved', 'rejected']);
 export const orderNumberSequence = pgSequence('order_number_seq');
 
 export interface DeliveryDetails {
@@ -26,14 +29,23 @@ export const orders = pgTable('orders', {
   subtotalClp: bigint('subtotal_clp', { mode: 'bigint' }).notNull(),
   deliveryFeeClp: integer('delivery_fee_clp').notNull().default(0),
   totalClp: bigint('total_clp', { mode: 'bigint' }).notNull().generatedAlwaysAs(sql`subtotal_clp + delivery_fee_clp`),
-  reservationExpiresAt: timestamp('reservation_expires_at', { withTimezone: true }).notNull(),
+  reservationExpiresAt: timestamp('reservation_expires_at', { withTimezone: true }),
   idempotencyKey: uuid('idempotency_key').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
   unique('orders_buyer_idempotency_unique').on(table.buyerId, table.idempotencyKey),
   check('orders_amounts_valid', sql`${table.subtotalClp} > 0 AND ${table.deliveryFeeClp} >= 0`),
-  check('orders_deadline_valid', sql`isfinite(${table.reservationExpiresAt}) AND ${table.reservationExpiresAt} > ${table.createdAt}`),
+  check('orders_deadline_valid', sql`(
+    (${table.status} IN ('pending_review', 'rejected') AND ${table.reservationExpiresAt} IS NULL)
+    OR (${table.status} IN ('pending_payment', 'confirmed', 'fulfilled', 'expired')
+      AND ${table.reservationExpiresAt} IS NOT NULL
+      AND isfinite(${table.reservationExpiresAt})
+      AND ${table.reservationExpiresAt} > ${table.createdAt})
+    OR (${table.status} = 'cancelled'
+      AND (${table.reservationExpiresAt} IS NULL
+        OR (isfinite(${table.reservationExpiresAt}) AND ${table.reservationExpiresAt} > ${table.createdAt})))
+  )`),
   check('orders_fulfillment_details_valid', sql`(
     ${table.fulfillmentMethod} = 'pickup' AND ${table.deliveryDetailsSnapshot} IS NULL AND ${table.deliveryFeeClp} = 0
   ) OR (
@@ -41,6 +53,7 @@ export const orders = pgTable('orders', {
     AND jsonb_typeof(${table.deliveryDetailsSnapshot}) = 'object'
   )`),
   index('orders_pending_deadline_idx').on(table.reservationExpiresAt, table.id).where(sql`${table.status} = 'pending_payment'`),
+  index('orders_pending_review_idx').on(table.createdAt, table.id).where(sql`${table.status} = 'pending_review'`),
 ]);
 
 export const orderItems = pgTable('order_items', {
@@ -110,8 +123,41 @@ export const orderStatusEvents = pgTable('order_status_events', {
   unique('order_status_events_operation_unique').on(table.orderId, table.operationId),
   check('order_status_events_actor_reason_valid', sql`${table.actorReference} ~ '[^[:space:]]' AND ${table.reason} ~ '[^[:space:]]'`),
   check('order_status_events_transition_valid', sql`CASE
-    WHEN ${table.fromStatus} IS NULL THEN ${table.toStatus} = 'pending_payment'
+    WHEN ${table.fromStatus} IS NULL THEN ${table.toStatus} IN ('pending_review', 'pending_payment')
+    WHEN ${table.fromStatus} = 'pending_review' THEN ${table.toStatus} IN ('pending_payment', 'rejected', 'cancelled')
     WHEN ${table.fromStatus} = 'pending_payment' THEN ${table.toStatus} IN ('confirmed', 'cancelled', 'expired')
     WHEN ${table.fromStatus} = 'confirmed' THEN ${table.toStatus} = 'fulfilled'
     ELSE false END`),
+]);
+
+export const orderPrescriptions = pgTable('order_prescriptions', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  orderId: uuid('order_id').notNull().unique().references(() => orders.id, { onDelete: 'restrict' }),
+  uploadedByUserId: uuid('uploaded_by_user_id').notNull().references(() => users.id, { onDelete: 'restrict' }),
+  storageKey: text('storage_key').notNull().unique(),
+  fileName: text('file_name').notNull(),
+  mimeType: text('mime_type').notNull(),
+  fileSizeBytes: integer('file_size_bytes').notNull(),
+  fileSha256: text('file_sha256').notNull(),
+  status: prescriptionReviewStatus('status').notNull().default('pending'),
+  reviewedByUserId: uuid('reviewed_by_user_id').references(() => users.id, { onDelete: 'restrict' }),
+  reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+  rejectionReason: text('rejection_reason'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  check('order_prescriptions_storage_key_valid', sql`${table.storageKey} ~ '^[a-z0-9][a-z0-9._-]{0,199}$' AND ${table.storageKey} NOT LIKE '%..%'`),
+  check('order_prescriptions_file_valid', sql`${table.fileName} ~ '[^[:space:]]'
+    AND ${table.mimeType} IN ('application/pdf', 'image/jpeg', 'image/png', 'image/webp')
+    AND ${table.fileSizeBytes} > 0 AND ${table.fileSizeBytes} <= 5242880
+    AND ${table.fileSha256} ~ '^[0-9a-f]{64}$'`),
+  check('order_prescriptions_review_valid', sql`(
+    ${table.status} = 'pending' AND ${table.reviewedByUserId} IS NULL AND ${table.reviewedAt} IS NULL AND ${table.rejectionReason} IS NULL
+  ) OR (
+    ${table.status} = 'approved' AND ${table.reviewedByUserId} IS NOT NULL AND ${table.reviewedAt} IS NOT NULL
+    AND ${table.reviewedAt} >= ${table.createdAt} AND ${table.rejectionReason} IS NULL
+  ) OR (
+    ${table.status} = 'rejected' AND ${table.reviewedByUserId} IS NOT NULL AND ${table.reviewedAt} IS NOT NULL
+    AND ${table.reviewedAt} >= ${table.createdAt} AND ${table.rejectionReason} IS NOT NULL AND ${table.rejectionReason} ~ '[^[:space:]]'
+  )`),
+  index('order_prescriptions_status_created_idx').on(table.status, table.createdAt),
 ]);
