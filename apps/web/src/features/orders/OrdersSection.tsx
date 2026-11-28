@@ -7,10 +7,11 @@ import {
   OrdersApiError,
   payMyOrder,
 } from './orders.api';
-import type { OrderDetail, OrderStatus, OrderSummary, PrescriptionReviewStatus } from './orders.api';
+import type { FulfillmentMethod, OrderDetail, OrderStatus, OrderSummary, PrescriptionReviewStatus } from './orders.api';
 
 interface OrdersSectionProps {
   modoSimple: boolean;
+  demoPayments: boolean;
   onBackToCatalog: () => void;
   onOrderCancelled?: () => void;
 }
@@ -24,6 +25,10 @@ const STATUS_LABELS: Record<OrderStatus, string> = {
   expired: 'Reserva vencida',
   rejected: 'Receta rechazada',
 };
+
+function statusLabel(status: OrderStatus, method: FulfillmentMethod) {
+  return status === 'fulfilled' && method === 'delivery' ? 'Despachado' : STATUS_LABELS[status];
+}
 
 const PRESCRIPTION_STATUS_LABELS: Record<PrescriptionReviewStatus, string> = {
   pending: 'Pendiente de revisión farmacéutica',
@@ -52,6 +57,7 @@ function formatFileSize(bytes: number): string {
 
 export function OrdersSection({
   modoSimple,
+  demoPayments,
   onBackToCatalog,
   onOrderCancelled,
 }: OrdersSectionProps) {
@@ -94,14 +100,16 @@ export function OrdersSection({
     return () => controller.abort();
   }, [loadOrders]);
 
-  async function toggleDetail(orderId: string) {
+  function toggleDetail(orderId: string) {
     if (expandedOrderId === orderId) {
       setExpandedOrderId(null);
       return;
     }
     setExpandedOrderId(orderId);
-    if (detailsById[orderId]) return;
+    void loadDetail(orderId);
+  }
 
+  async function loadDetail(orderId: string) {
     setDetailLoadingId(orderId);
     setDetailError((current) => ({ ...current, [orderId]: '' }));
     try {
@@ -121,7 +129,7 @@ export function OrdersSection({
   }
 
   async function handlePay(orderId: string) {
-    if (payingId || cancellingId) return;
+    if (!demoPayments || payingId || cancellingId) return;
     setPayingId(orderId);
     setActionMessage('');
     setError('');
@@ -139,10 +147,11 @@ export function OrdersSection({
       setDetailsById((current) => {
         const existing = current[updated.id];
         if (!existing) return current;
-        return { ...current, [updated.id]: { ...existing, ...updated } };
+        return { ...current, [updated.id]: { ...existing, ...updated, history: [] } };
       });
+      if (expandedOrderId === updated.id) void loadDetail(updated.id);
       setConfirmingCancelId((current) => (current === updated.id ? null : current));
-      setActionMessage(`Pago confirmado para la solicitud ${updated.orderNumber}. La farmacia ya puede preparar tu pedido.`);
+      setActionMessage(`Pago simulado para la solicitud ${updated.orderNumber}. No se realizó ningún cargo.`);
     } catch (failure: unknown) {
       setError(
         failure instanceof OrdersApiError
@@ -173,8 +182,9 @@ export function OrdersSection({
       setDetailsById((current) => {
         const existing = current[updated.id];
         if (!existing) return current;
-        return { ...current, [updated.id]: { ...existing, ...updated } };
+        return { ...current, [updated.id]: { ...existing, ...updated, history: [] } };
       });
+      if (expandedOrderId === updated.id) void loadDetail(updated.id);
       setConfirmingCancelId(null);
       setActionMessage(`La solicitud ${updated.orderNumber} fue cancelada y su stock quedó liberado.`);
       onOrderCancelled?.();
@@ -259,7 +269,7 @@ export function OrdersSection({
                     <span className="order-date"> · {formatDateTime(order.createdAt)}</span>
                   </div>
                   <span className={`order-status-badge status-${order.status}`}>
-                    {STATUS_LABELS[order.status]}
+                    {statusLabel(order.status, order.fulfillmentMethod)}
                   </span>
                 </div>
 
@@ -281,6 +291,9 @@ export function OrdersSection({
                         Reserva vigente hasta: {formatDateTime(order.reservationExpiresAt)}
                       </p>
                     )}
+                    {order.status === 'pending_payment' && !demoPayments && (
+                      <p className="order-expiry">El pago en línea todavía no está disponible.</p>
+                    )}
                     {order.status === 'rejected' && (
                       <p className="order-rejected-note">
                         Receta no aprobada (stock liberado). Abre «Ver detalle» para revisar el motivo.
@@ -300,17 +313,17 @@ export function OrdersSection({
                     aria-expanded={isExpanded}
                     onClick={() => void toggleDetail(order.id)}
                   >
-                    {isExpanded ? 'Ocultar detalle' : 'Ver detalle'}
+                    {isExpanded ? 'Ocultar detalle' : 'Ver detalle y seguimiento'}
                   </button>
 
-                  {order.status === 'pending_payment' && !isConfirmingCancel && (
+                  {demoPayments && order.status === 'pending_payment' && !isConfirmingCancel && (
                     <button
                       type="button"
                       className="btn-agregar"
                       disabled={Boolean(payingId || cancellingId)}
                       onClick={() => void handlePay(order.id)}
                     >
-                      {payingId === order.id ? 'Procesando pago…' : 'Pagar ahora'}
+                      {payingId === order.id ? 'Simulando pago…' : 'Simular pago'}
                     </button>
                   )}
 
@@ -358,6 +371,19 @@ export function OrdersSection({
                       <p className="carrito-alerta-error" role="alert">{orderDetailError}</p>
                     ) : detail ? (
                       <>
+                        {detail.history && detail.history.length > 0 && (
+                          <section aria-label="Seguimiento del pedido">
+                            <h3 className="order-detail-heading">Seguimiento del pedido</h3>
+                            <ol className="order-history">
+                              {detail.history.map(({ status, occurredAt }) => (
+                                <li key={status}>
+                                  <strong>{statusLabel(status, detail.fulfillmentMethod)}</strong>
+                                  {' · '}<time dateTime={occurredAt}>{formatDateTime(occurredAt)}</time>
+                                </li>
+                              ))}
+                            </ol>
+                          </section>
+                        )}
                         <h3 className="order-detail-heading">Medicamentos solicitados</h3>
                         <ul className="order-items-list">
                           {detail.items.map((item) => (

@@ -233,6 +233,7 @@ export function CatalogoPage() {
       ) : mostrandoPedidos ? (
         <OrdersSection
           modoSimple={modoSimple}
+          demoPayments={cuentaActiva?.demoPayments === true}
           onBackToCatalog={() => setVistaActiva('catalogo')}
           onOrderCancelled={() => void cargarCatalogo()}
         />
@@ -350,6 +351,7 @@ export function CatalogoPage() {
         carrito={carrito}
         abierto={carritoAbierto}
         usuarioEmail={cuentaActiva?.email}
+        demoPayments={cuentaActiva?.demoPayments === true}
         deliveryFeeClp={deliveryFeeClp}
         onCerrar={() => setCarritoAbierto(false)}
         onCambiarCantidad={cambiarCantidad}

@@ -62,6 +62,7 @@ export interface OrderDetail extends OrderSummary {
   deliveryDetails: OrderDeliveryDetails | null;
   items: OrderItemDetail[];
   prescription?: PrescriptionSummary | null;
+  history?: { status: OrderStatus; occurredAt: string }[];
 }
 
 export interface CreatePrescriptionOrderInput {
@@ -177,7 +178,15 @@ function isOrderDetail(value: unknown): value is OrderDetail {
   const itemsValid = Array.isArray(row.items) && row.items.every(isOrderItemDetail);
   const prescriptionValid =
     row.prescription === undefined || row.prescription === null || isPrescriptionSummary(row.prescription);
-  return deliveryValid && itemsValid && prescriptionValid;
+  const historyValid = row.history === undefined || (Array.isArray(row.history) && row.history.every(
+    (event: unknown) => {
+      if (!event || typeof event !== 'object') return false;
+      const { status, occurredAt } = event as Record<string, unknown>;
+      return VALID_ORDER_STATUSES.some((value) => value === status)
+        && typeof occurredAt === 'string' && Number.isFinite(Date.parse(occurredAt));
+    },
+  ));
+  return deliveryValid && itemsValid && prescriptionValid && historyValid;
 }
 
 function extractProductNames(payload: unknown): string[] | undefined {
@@ -191,6 +200,7 @@ function extractProductNames(payload: unknown): string[] | undefined {
 function mapErrorMessage(status: number, code: string, productNames?: readonly string[]): string {
   if (status === 401) return 'Tu sesión expiró. Vuelve a iniciar sesión para ver tus pedidos.';
   if (status === 403) return 'Tu cuenta aún no tiene permisos de compra habilitados.';
+  if (code === 'online_payment_unavailable') return 'El pago en línea todavía no está disponible. No se realizó ningún cargo.';
   if (status === 404) return 'No encontramos el pedido solicitado.';
   if (status === 409) {
     if (code === 'insufficient_stock') {

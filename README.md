@@ -92,6 +92,15 @@ El workspace autoriza únicamente el script de instalación de `esbuild`, necesa
 
 Para ejecutar las verificaciones de forma nativa, instalar las dependencias con `pnpm install --frozen-lockfile` y luego ejecutar `pnpm check`. Las imágenes Docker también usan el lockfile en modo frozen.
 
+## Orders and prescription review
+
+Staff can filter the order queue by fulfillment method and switch between newest and oldest orders. Staff can zoom JPEG, PNG, and WebP prescriptions in the order detail; PDFs still open separately. Buyers can see recorded status changes for their own orders. A dispatched order is not shown as delivered.
+
+Webpay is not integrated. To exercise the simulated payment with synthetic data,
+set `ORDER_DEMO_PAYMENTS=true` and use a loopback HTTP auth origin in local
+development. The API will not confirm simulated payments by default, for a public
+origin, or under `NODE_ENV=production`.
+
 ## Integración continua
 
 [GitHub Actions](.github/workflows/ci.yml) ejecuta el CI en cada pull request,

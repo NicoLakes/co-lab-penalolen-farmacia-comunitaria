@@ -82,6 +82,7 @@ test('prescription orders enforce stock reservation, private file access, pharma
       sendCode: async (email, code) => { codes.set(email, code); },
     }),
     orderPolicy,
+    demoPayments: true,
     prescriptionStorage: storage,
     sendEmail: async (message) => { sentEmails.push(message); },
   });
@@ -263,6 +264,30 @@ test('prescription orders enforce stock reservation, private file access, pharma
   });
   assert.equal(fulfilledRes.statusCode, 200, fulfilledRes.body);
   assert.equal(fulfilledRes.json<{ status: string }>().status, 'fulfilled');
+
+  const historyUrl = `/api/orders/${created.id}`;
+  const ownerHistory = await app.inject({ method: 'GET', url: historyUrl, headers: buyer1.headers });
+  assert.equal(ownerHistory.statusCode, 200);
+  const history = ownerHistory.json<{ history: { status: string; occurredAt: string }[] }>().history;
+  assert.deepEqual(history.map(({ status }) => status), ['pending_review', 'pending_payment', 'confirmed', 'fulfilled']);
+  for (const event of history) {
+    assert.deepEqual(Object.keys(event).sort(), ['occurredAt', 'status']);
+    assert.ok(Number.isFinite(Date.parse(event.occurredAt)));
+  }
+  const privateHistory = await app.inject({ method: 'GET', url: historyUrl, headers: buyer2.headers });
+  assert.equal(privateHistory.statusCode, 404);
+
+  const queue = '/api/fulfillment/orders?status=fulfilled&sort=newest&method=';
+  const pickupQueue = await app.inject({ method: 'GET', url: queue + 'pickup', headers: staff.headers });
+  assert.equal(pickupQueue.statusCode, 200);
+  assert.deepEqual(pickupQueue.json<{ id: string }[]>().map(({ id }) => id), [created.id]);
+  const deliveryQueue = await app.inject({ method: 'GET', url: queue + 'delivery', headers: staff.headers });
+  assert.equal(deliveryQueue.statusCode, 200);
+  assert.deepEqual(deliveryQueue.json(), []);
+  const invalidQueue = await app.inject({
+    method: 'GET', url: '/api/fulfillment/orders?sort=invalid', headers: staff.headers,
+  });
+  assert.equal(invalidQueue.statusCode, 400);
 
   const [rxBalanceAfterFulfill] = await db.select().from(inventoryBalances)
     .where(eq(inventoryBalances.id, rxSimple.balance.id));

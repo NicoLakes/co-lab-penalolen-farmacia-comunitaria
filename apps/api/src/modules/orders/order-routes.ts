@@ -1,6 +1,6 @@
 import type { Database } from '@farmacia/database';
-import { authUsers, orderItems, orderPrescriptions, orders, users } from '@farmacia/database/schema';
-import { and, asc, desc, eq, inArray } from 'drizzle-orm';
+import { authUsers, orderItems, orderPrescriptions, orders, orderStatusEvents, users } from '@farmacia/database/schema';
+import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Permission, Role } from '../auth/access.js';
 import { authIssuer } from '../auth/auth.js';
@@ -24,6 +24,7 @@ export interface OrderRoutesOptions {
   prescriptionStorage?: PrescriptionStorage | undefined;
   sendEmail?: SendOrderEmail | undefined;
   origin?: string | undefined;
+  demoPayments?: boolean | undefined;
 }
 
 const orderParams = {
@@ -32,11 +33,19 @@ const orderParams = {
 const operationBody = {
   type: 'object', additionalProperties: false, required: ['operationId'], properties: { operationId: uuidField },
 };
+type FulfillmentListQuery = {
+  status?: 'pending_review' | 'confirmed' | 'fulfilled' | 'rejected';
+  sort?: 'newest' | 'oldest';
+  method?: 'pickup' | 'delivery';
+};
+
 const fulfillmentListQuery = {
   type: 'object',
   additionalProperties: false,
   properties: {
     status: { enum: ['pending_review', 'confirmed', 'fulfilled', 'rejected'] },
+    sort: { enum: ['newest', 'oldest'] },
+    method: { enum: ['pickup', 'delivery'] },
   },
 };
 const createInPersonBody = {
@@ -135,7 +144,7 @@ export function registerOrderRoutes(
   authorize: Authorize,
   options: OrderRoutesOptions = {},
 ) {
-  const { policy, prescriptionStorage, sendEmail, origin } = options;
+  const { policy, prescriptionStorage, sendEmail, origin, demoPayments } = options;
 
   app.post<{ Body: CreateOrderInput }>('/api/orders', { schema: { body: createBody } }, async (request, reply) => {
     const user = await authorize(request, reply, 'orders.create');
@@ -158,28 +167,46 @@ export function registerOrderRoutes(
     const [order] = await db.select().from(orders)
       .where(and(eq(orders.id, request.params.orderId), eq(orders.buyerId, user.id)));
     if (!order) return reply.code(404).send({ code: 'not_found' });
-    const [items, prescription] = await Promise.all([
+    const [items, prescription, history] = await Promise.all([
       loadOrderItems(db, order.id),
       loadOrderPrescription(db, order.id),
+      db.select({
+        status: orderStatusEvents.toStatus, occurredAt: orderStatusEvents.createdAt,
+      }).from(orderStatusEvents)
+        .where(eq(orderStatusEvents.orderId, order.id))
+        // In-person sales write multiple transitions in the same transaction.
+        .orderBy(sql`CASE
+          WHEN ${orderStatusEvents.fromStatus} IS NULL THEN 0
+          WHEN ${orderStatusEvents.fromStatus} = 'pending_review' THEN 1
+          WHEN ${orderStatusEvents.fromStatus} = 'pending_payment' THEN 2
+          WHEN ${orderStatusEvents.fromStatus} = 'confirmed' THEN 3
+          ELSE 4 END`, orderStatusEvents.createdAt, orderStatusEvents.id),
     ]);
-    return { ...summary(order), deliveryDetails: order.deliveryDetailsSnapshot, items, prescription };
+    return { ...summary(order), deliveryDetails: order.deliveryDetailsSnapshot, items, prescription, history };
   });
 
-  app.get<{ Querystring: { status?: 'pending_review' | 'confirmed' | 'fulfilled' | 'rejected' } }>(
+  app.get<{ Querystring: FulfillmentListQuery }>(
     '/api/fulfillment/orders',
     { schema: { querystring: fulfillmentListQuery } },
     async (request, reply) => {
       const staff = await authorize(request, reply, 'orders.read_for_fulfillment');
       if (!staff) return reply;
-      const targetStatus = request.query.status ?? 'confirmed';
+      const { status: targetStatus = 'confirmed', sort, method } = request.query;
+      const orderBy = sort
+        ? sort === 'oldest'
+          ? [asc(orders.createdAt), asc(orders.id)]
+          : [desc(orders.createdAt), desc(orders.id)]
+        : targetStatus === 'pending_review'
+          ? [asc(orders.createdAt), asc(orders.id)]
+          : [desc(orders.updatedAt), desc(orders.id)];
       const rows = await db.select({ ...summaryFields, buyerEmail: authUsers.email }).from(orders)
         .leftJoin(users, eq(users.id, orders.buyerId))
         .leftJoin(authUsers, and(eq(users.identityIssuer, authIssuer), eq(authUsers.id, users.identitySubject)))
-        .where(eq(orders.status, targetStatus))
-        .orderBy(
-          targetStatus === 'pending_review' ? asc(orders.createdAt) : desc(orders.updatedAt),
-          targetStatus === 'pending_review' ? asc(orders.id) : desc(orders.id),
-        )
+        .where(and(
+          eq(orders.status, targetStatus),
+          method ? eq(orders.fulfillmentMethod, method) : undefined,
+        ))
+        .orderBy(...orderBy)
         .limit(50);
       return rows.map((row) => ({ ...summary(row), buyerEmail: row.buyerEmail ?? null }));
     },
@@ -224,10 +251,11 @@ export function registerOrderRoutes(
       return summary(order);
     });
   });
-  // Temporary direct-confirmation boundary until Webpay Oneclick authorization replaces this step.
+  // Never confirm payment from this route outside the local demo.
   app.post<Transition>('/api/orders/:orderId/pay', transitionSchema, async (request, reply) => {
     const user = await authorize(request, reply, 'orders.pay_own');
     if (!user) return reply;
+    if (!demoPayments) return reply.code(503).send({ code: 'online_payment_unavailable' });
     return sendOrderResult(reply, async () => {
       const [owned] = await db.select({ id: orders.id, totalClp: orders.totalClp }).from(orders)
         .where(and(eq(orders.id, request.params.orderId), eq(orders.buyerId, user.id)));

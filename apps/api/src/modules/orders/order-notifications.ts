@@ -29,7 +29,7 @@ export function buildPrescriptionApprovedEmail(input: {
   const total = formatClp(input.totalClp);
   return {
     to: input.to,
-    subject: `Receta aprobada — Pedido ${input.orderNumber} listo para pagar`,
+    subject: `Receta aprobada — Pedido ${input.orderNumber}`,
     text: [
       `Estimado/a,`,
       ``,
@@ -37,10 +37,10 @@ export function buildPrescriptionApprovedEmail(input: {
       ``,
       `Resumen:`,
       `- Pedido: ${input.orderNumber}`,
-      `- Total a pagar: ${total}`,
+      `- Total del pedido: ${total}`,
       `- Stock reservado hasta: ${deadline}`,
       ``,
-      `Para completar tu compra, ingresa a ${input.origin}, inicia sesión con tu correo y abre la sección "Mis pedidos".`,
+      `Para consultar el estado de la solicitud, ingresa a ${input.origin}, inicia sesión con tu correo y abre la sección "Mis pedidos".`,
       `Si no se registra el pago antes de la fecha límite, la reserva vencerá automáticamente y los medicamentos volverán al inventario.`,
       ``,
       `Farmacia Comunitaria de Peñalolén`,

@@ -42,6 +42,12 @@ test('listFulfillmentOrders queries by status including pending_review with null
   assert.deepEqual(result, [pendingReview]);
 });
 
+test('listFulfillmentOrders sends explicit sort and fulfillment filters', async () => {
+  const fetchMock = mock.method(globalThis, 'fetch', async () => Response.json([]));
+  await listFulfillmentOrders('confirmed', undefined, { sort: 'oldest', method: 'delivery' });
+  assert.equal(fetchMock.mock.calls[0]?.arguments[0], '/api/fulfillment/orders?status=confirmed&sort=oldest&method=delivery');
+});
+
 test('getFulfillmentOrderDetail returns validated items, delivery details and prescription', async () => {
   const detailPayload = {
     ...sampleOrder,

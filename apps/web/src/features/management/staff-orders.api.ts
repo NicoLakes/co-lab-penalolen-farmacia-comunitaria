@@ -11,6 +11,7 @@ import type {
 } from '../orders/orders.api';
 
 export type StaffOrderStatusFilter = 'pending_review' | 'confirmed' | 'fulfilled' | 'rejected';
+export type StaffOrderSort = 'newest' | 'oldest';
 
 export interface StaffOrderSummary {
   id: string;
@@ -164,8 +165,11 @@ export function staffPrescriptionDownloadUrl(orderId: string): string {
 export async function listFulfillmentOrders(
   status: StaffOrderStatusFilter,
   signal?: AbortSignal,
+  filters?: { sort?: StaffOrderSort | undefined; method?: FulfillmentMethod | undefined },
 ): Promise<StaffOrderSummary[]> {
   const params = new URLSearchParams({ status });
+  if (filters?.sort) params.set('sort', filters.sort);
+  if (filters?.method) params.set('method', filters.method);
   const response = await fetch(`/api/fulfillment/orders?${params.toString()}`, signal ? { signal } : undefined);
   const payload = await parseJsonOrThrow(response);
   if (!Array.isArray(payload) || !payload.every(isStaffOrderSummary)) {

@@ -34,6 +34,7 @@ interface CarritoPanelProps {
   abierto: boolean;
   usuarioEmail?: string | undefined;
   deliveryFeeClp: number | null;
+  demoPayments: boolean;
   onCerrar: () => void;
   onCambiarCantidad: (codigo: string, nuevaCantidad: number) => void;
   onPedidoCreado?: (() => void) | undefined;
@@ -66,6 +67,7 @@ export function CarritoPanel({
   abierto,
   usuarioEmail,
   deliveryFeeClp,
+  demoPayments,
   onCerrar,
   onCambiarCantidad,
   onPedidoCreado,
@@ -288,7 +290,7 @@ export function CarritoPanel({
   }
 
   async function pagarPedidoReciente() {
-    if (!pedidoExitoso || pedidoExitoso.status !== 'pending_payment' || pagandoExito || pedidoPagado) return;
+    if (!demoPayments || !pedidoExitoso || pedidoExitoso.status !== 'pending_payment' || pagandoExito || pedidoPagado) return;
     setPagandoExito(true);
     setErrorPagoExito('');
     if (!payKeyRef.current) payKeyRef.current = crypto.randomUUID();
@@ -332,7 +334,7 @@ export function CarritoPanel({
               {pedidoExitoso.status === 'pending_review'
                 ? 'Solicitud enviada a revisión de receta'
                 : pedidoPagado
-                  ? 'Pago confirmado'
+                  ? 'Pago simulado'
                   : 'Solicitud registrada'}
             </strong>
             <p>
@@ -341,23 +343,25 @@ export function CarritoPanel({
             </p>
             <p>
               {pedidoExitoso.status === 'pending_review'
-                ? 'Tu stock ya quedó reservado mientras la farmacia revisa tu receta. Te avisaremos por correo cuando sea aprobada para que puedas pagar.'
+                ? 'El stock quedó reservado mientras la farmacia revisa tu receta. Te avisaremos por correo el resultado.'
                 : pedidoPagado
-                  ? 'Tu pedido ya pasó a la farmacia para preparación y entrega.'
-                  : `Stock reservado por 15 minutos para ${pedidoExitoso.fulfillmentMethod === 'pickup' ? 'retiro en farmacia' : 'despacho a domicilio'}.`}
+                  ? 'No se realizó ningún cargo.'
+                  : demoPayments
+                    ? `Stock reservado para ${pedidoExitoso.fulfillmentMethod === 'pickup' ? 'retiro en farmacia' : 'despacho a domicilio'}.`
+                    : 'El pago en línea todavía no está disponible. No se realizó ningún cargo.'}
             </p>
             {errorPagoExito && (
               <p className="carrito-alerta-error" role="alert">{errorPagoExito}</p>
             )}
             <div className="alerta-exito-actions">
-              {pedidoExitoso.status === 'pending_payment' && !pedidoPagado && (
+              {demoPayments && pedidoExitoso.status === 'pending_payment' && !pedidoPagado && (
                 <button
                   type="button"
                   className="btn-agregar"
                   disabled={pagandoExito}
                   onClick={() => void pagarPedidoReciente()}
                 >
-                  {pagandoExito ? 'Procesando pago…' : 'Pagar ahora'}
+                  {pagandoExito ? 'Simulando pago…' : 'Simular pago'}
                 </button>
               )}
               {onVerMisPedidos && (

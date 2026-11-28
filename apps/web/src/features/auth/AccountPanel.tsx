@@ -4,6 +4,7 @@ import type { FormEvent } from 'react';
 export interface Account {
   email: string;
   roles: string[];
+  demoPayments: boolean;
 }
 
 interface AccountPanelProps {
@@ -26,7 +27,7 @@ async function readAccount(signal?: AbortSignal): Promise<Account | 'disabled' |
     || !('roles' in data) || !Array.isArray(data.roles) || !data.roles.every((role) => typeof role === 'string')) {
     throw new Error('No pudimos comprobar tu sesión.');
   }
-  return { email: data.email, roles: data.roles };
+  return { email: data.email, roles: data.roles, demoPayments: 'demoPayments' in data && data.demoPayments === true };
 }
 
 function authRequest(path: string, body: object) {

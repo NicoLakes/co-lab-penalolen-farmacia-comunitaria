@@ -55,6 +55,7 @@ try {
         auth,
         origin: config.origin,
         orderPolicy: config.orderPolicy,
+        demoPayments: config.demoPayments,
         prescriptionStorage,
         async sendEmail({ to, subject, text }) {
           await mailer.sendMail({ from: config.from, to, subject, text });

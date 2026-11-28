@@ -41,6 +41,7 @@ test('Better Auth sessions enforce role changes and order ownership at the HTTP 
       sendCode: async (email, code) => { codes.set(email, code); },
     }),
     orderPolicy,
+    demoPayments: true,
   });
 
   async function readCatalog() {
@@ -201,10 +202,27 @@ test('Better Auth sessions enforce role changes and order ownership at the HTTP 
   })).statusCode, 403);
   const inPerson = await app.inject({
     method: 'POST', url: '/api/fulfillment/orders/in-person', headers: operator.headers,
-    payload: { idempotencyKey: randomUUID(), paymentMethod: 'bank_transfer', items: [{ productId: product.id, quantity: 1 }] },
+    payload: { idempotencyKey: randomUUID(), paymentMethod: 'bank_transfer', buyerEmail: 'buyer@example.test', items: [{ productId: product.id, quantity: 1 }] },
   });
   assert.equal(inPerson.statusCode, 201, inPerson.body);
-  assert.equal(inPerson.json<{ status: string }>().status, 'fulfilled');
+  const inPersonOrder = inPerson.json<{ id: string; status: string }>();
+  assert.equal(inPersonOrder.status, 'fulfilled');
+  const inPersonDetail = await app.inject({
+    method: 'GET', url: `/api/orders/${inPersonOrder.id}`, headers: buyer.headers,
+  });
+  assert.equal(inPersonDetail.statusCode, 200);
+  assert.deepEqual(inPersonDetail.json<{ history: { status: string }[] }>().history.map(({ status }) => status),
+    ['pending_payment', 'confirmed', 'fulfilled']);
+
+  for (const [sort, expected] of [
+    ['newest', [inPersonOrder.id, view.id]], ['oldest', [view.id, inPersonOrder.id]],
+  ] as const) {
+    const queue = await app.inject({
+      method: 'GET', url: `/api/fulfillment/orders?status=fulfilled&sort=${sort}`, headers: operator.headers,
+    });
+    assert.equal(queue.statusCode, 200);
+    assert.deepEqual(queue.json<{ id: string }[]>().map(({ id }) => id), expected);
+  }
   assert.equal((await readCatalog()).items.find(({ id }) => id === product.id)?.stock, 1);
 
   assert.equal((await app.inject({ method: 'DELETE', url: roleUrl(buyer.id), headers: admin.headers })).statusCode, 204);

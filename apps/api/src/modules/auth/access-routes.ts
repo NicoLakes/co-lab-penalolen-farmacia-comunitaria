@@ -34,9 +34,9 @@ function sendChange(reply: FastifyReply, result: 'ok' | 'forbidden' | 'not_found
 
 export function registerAccessRoutes(app: FastifyInstance, options: {
   db: Database; auth: Auth; origin: string; orderPolicy?: OrderPolicy | undefined;
-  prescriptionStorage?: PrescriptionStorage | undefined; sendEmail?: SendOrderEmail | undefined;
+  prescriptionStorage?: PrescriptionStorage | undefined; sendEmail?: SendOrderEmail | undefined; demoPayments?: boolean | undefined;
 }) {
-  const { db, auth, origin, orderPolicy, prescriptionStorage, sendEmail } = options;
+  const { db, auth, origin, orderPolicy, prescriptionStorage, sendEmail, demoPayments } = options;
   app.register(async (api) => {
     api.addHook('onRequest', async (request, reply) => {
       reply.header('Cache-Control', 'no-store');
@@ -100,7 +100,11 @@ export function registerAccessRoutes(app: FastifyInstance, options: {
       return { id: user.id, email: session.user.email, roles };
     };
 
-    api.get('/api/me', async (request, reply) => await authorize(request, reply) ?? reply);
+    api.get('/api/me', async (request, reply) => {
+      const user = await authorize(request, reply);
+      if (!user) return reply;
+      return { ...user, ...(demoPayments && { demoPayments: true }) };
+    });
     api.get<{ Querystring: { q?: string; limit?: number } }>('/api/admin/users', {
       schema: {
         querystring: {
@@ -173,7 +177,7 @@ export function registerAccessRoutes(app: FastifyInstance, options: {
         },
       });
     }
-    registerOrderRoutes(api, db, authorize, { policy: orderPolicy, prescriptionStorage, sendEmail, origin });
+    registerOrderRoutes(api, db, authorize, { policy: orderPolicy, prescriptionStorage, sendEmail, origin, demoPayments });
     registerInventoryRoutes(api, db, authorize, orderPolicy);
   });
 }

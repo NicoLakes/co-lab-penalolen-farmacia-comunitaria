@@ -73,6 +73,7 @@ test('getMyOrderDetail validates items, delivery details and prescription metada
         unitPriceClp: 1490,
       },
     ],
+    history: [{ status: 'rejected', occurredAt: '2026-11-22T04:15:00.000Z' }],
     prescription: {
       ...samplePrescription,
       status: 'rejected' as const,
@@ -92,6 +93,14 @@ test('getMyOrderDetail rejects malformed payloads', async () => {
     getMyOrderDetail(sampleSummary.id),
     (error: unknown) => error instanceof OrdersApiError && error.code === 'invalid_response',
   );
+});
+
+test('getMyOrderDetail rejects invalid history events', async () => {
+  mock.method(globalThis, 'fetch', async () => Response.json({
+    ...sampleSummary, deliveryDetails: null, items: [],
+    history: [{ status: 'confirmed', occurredAt: 'unknown' }],
+  }));
+  await assert.rejects(getMyOrderDetail(sampleSummary.id), { code: 'invalid_response' });
 });
 
 test('createPrescriptionOrder posts payload and surfaces insufficient_stock productNames', async () => {

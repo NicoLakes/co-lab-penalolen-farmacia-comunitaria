@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
-import type { PrescriptionReviewStatus } from '../orders/orders.api';
+import type { FulfillmentMethod, PrescriptionReviewStatus } from '../orders/orders.api';
 import {
   approveStaffPrescription,
   createInPersonOrder,
@@ -15,11 +15,13 @@ import {
 import type {
   InPersonPaymentMethod,
   StaffOrderDetail,
+  StaffOrderSort,
   StaffOrderStatusFilter,
   StaffOrderSummary,
 } from './staff-orders.api';
 import { listStaffStock } from './staff-stock.api';
 import type { StaffStockItem } from './staff-stock.api';
+import { PrescriptionPreview } from './PrescriptionPreview';
 
 interface StaffOrdersPanelProps {
   onCatalogChanged?: (() => void) | undefined;
@@ -70,6 +72,8 @@ export function StaffOrdersPanel({ onCatalogChanged }: StaffOrdersPanelProps) {
   const [loading, setLoading] = useState(true);
   const [refreshTick, setRefreshTick] = useState(0);
   const [search, setSearch] = useState('');
+  const [sort, setSort] = useState<StaffOrderSort | ''>('');
+  const [method, setMethod] = useState<FulfillmentMethod | ''>('');
 
   const [showManualForm, setShowManualForm] = useState(false);
   const [stockCatalog, setStockCatalog] = useState<StaffStockItem[]>([]);
@@ -99,7 +103,7 @@ export function StaffOrdersPanel({ onCatalogChanged }: StaffOrdersPanelProps) {
 
   useEffect(() => {
     const controller = new AbortController();
-    void listFulfillmentOrders(statusTab, controller.signal)
+    void listFulfillmentOrders(statusTab, controller.signal, { sort: sort || undefined, method: method || undefined })
       .then((result) => {
         if (controller.signal.aborted) return;
         setOrders(result);
@@ -117,7 +121,7 @@ export function StaffOrdersPanel({ onCatalogChanged }: StaffOrdersPanelProps) {
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [statusTab, refreshTick]);
+  }, [statusTab, refreshTick, sort, method]);
 
   useEffect(() => {
     if (!showManualForm) return;
@@ -598,6 +602,34 @@ export function StaffOrdersPanel({ onCatalogChanged }: StaffOrdersPanelProps) {
           </button>
         </div>
 
+        <div className="staff-order-controls">
+          <label>
+            Modalidad
+            <select value={method} onChange={(event) => {
+              const value = event.target.value;
+              setMethod(value === 'pickup' || value === 'delivery' ? value : '');
+              setOrders([]);
+              setLoading(true);
+            }}>
+              <option value="">Todas</option>
+              <option value="pickup">Retiro</option>
+              <option value="delivery">Despacho</option>
+            </select>
+          </label>
+          <label>
+            Orden de ingreso
+            <select value={sort} onChange={(event) => {
+              const value = event.target.value;
+              setSort(value === 'newest' || value === 'oldest' ? value : '');
+              setOrders([]);
+              setLoading(true);
+            }}>
+              <option value="">Predeterminado</option>
+              <option value="newest">Más recientes primero</option>
+              <option value="oldest">Más antiguos primero</option>
+            </select>
+          </label>
+        </div>
         <input
           type="search"
           className="input-busqueda"
@@ -623,7 +655,7 @@ export function StaffOrdersPanel({ onCatalogChanged }: StaffOrdersPanelProps) {
       {loading && orders.length === 0 ? (
         <p className="orders-empty" role="status">Cargando pedidos…</p>
       ) : filteredOrders.length === 0 ? (
-        <p className="orders-empty">{emptyMessageByTab[statusTab]}</p>
+        <p className="orders-empty">{search.trim() || method ? 'No encontramos pedidos con esos filtros.' : emptyMessageByTab[statusTab]}</p>
       ) : (
         <ul className="orders-list">
           {filteredOrders.map((order) => {
@@ -650,7 +682,7 @@ export function StaffOrdersPanel({ onCatalogChanged }: StaffOrdersPanelProps) {
                     <span className="order-date"> · {formatDateTime(order.createdAt)}</span>
                   </div>
                   <span className={`order-status-badge status-${order.status}`}>
-                    {badgeLabel}
+                    {order.status === 'fulfilled' && isDelivery ? 'Despachado' : badgeLabel}
                   </span>
                 </div>
 
@@ -870,6 +902,10 @@ export function StaffOrdersPanel({ onCatalogChanged }: StaffOrdersPanelProps) {
                                 Abrir receta adjunta
                               </a>
                             </div>
+                            <PrescriptionPreview
+                              url={staffPrescriptionDownloadUrl(order.id)}
+                              mimeType={detail.prescription.mimeType}
+                            />
                             {detail.prescription.rejectionReason && (
                               <div className="receta-rejection-box" role="alert">
                                 <strong>Motivo del rechazo:</strong> {detail.prescription.rejectionReason}
